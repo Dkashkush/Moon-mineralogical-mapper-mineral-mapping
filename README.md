@@ -36,7 +36,12 @@ For a scene `m3g20090607t025544_v01` the `map` command writes:
 | `*_mineral_map.png` | quick-look class map |
 | `*_spectra.png` | M3 spectra of the strongest detections vs. fitted reference, per feature |
 | `*_ibd.png` | standard M3 IBD colour composite |
-| `*_summary.csv`, `*_run.json` | detections per mineral; every setting, band and reference used (for your methods section) |
+| `*_samsid.img`, `*_lsma.img`, `*_cem.img` | SAM + SID matches, LSMA fractions + RMSE, CEM scores (independent cross-checks) |
+| `*_consensus.img` / `*_consensus_map.tif` | how many of SAM+SID, LSMA and CEM agree with feature fitting (0–3) |
+| `*_crosscheck.csv` | agreement between methods per mineral (GOOD / REVIEW / POOR) |
+| `*_mineral_map_projected.png` | publication map: lat/lon grid, scale bar, north arrow, legend |
+| `*_summary.csv`, `*_run.json` | detections per mineral; every setting, band and reference used |
+| `*_methods.md` | draft methods paragraph written from the settings actually used |
 
 `.img` files stay in the sensor's image geometry. `*_map.tif` files are resampled to an
 equirectangular grid in the Moon 2015 geographic CRS (R = 1737.4 km).
@@ -89,7 +94,12 @@ import sys; sys.path.insert(0, '/content/lunacorder/src')
    * compute fit (shape correlation), band depth and 1σ uncertainty,
    * check absent-feature rules (for example, olivine must *not* show a 2 µm band),
    * in each group, keep the passing material with the highest fit × depth.
-4. **Write** image-geometry stacks, map-projected GeoTIFFs, figures and a JSON run log.
+4. **Cross-check** with SAM + SID, LSMA and CEM, and count per pixel how many agree.
+5. **Write** image-geometry stacks, map-projected GeoTIFFs, figures, a JSON run log and a
+   draft methods paragraph.
+
+Errors found in this project's earlier notebooks, and how they were fixed, are listed in
+[`docs/CORRECTIONS.md`](docs/CORRECTIONS.md).
 
 The full method, equations and references are in [`docs/METHOD.md`](docs/METHOD.md).
 

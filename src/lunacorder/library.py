@@ -310,8 +310,43 @@ def read_relab_tab(path: str | os.PathLike) -> Spectrum:
     return Spectrum(name=path.stem, wavelengths=wl, reflectance=np.array(refl), source="RELAB")
 
 
+_XML_NAME_TAGS = ("specimen_name", "sample_name", "mineral_name", "specimen_description", "title")
+
+
+def relab_xml_name(tab_path: Path) -> str | None:
+    """Readable specimen name from the PDS4 XML label next to a RELAB ``.tab`` file.
+
+    Label schemas vary between RELAB releases, so the first non-empty element whose
+    tag ends with one of ``specimen_name``, ``sample_name``, ``mineral_name``,
+    ``specimen_description`` or ``title`` is used (in that order of preference).
+    """
+    import xml.etree.ElementTree as ET
+
+    candidates = [tab_path.with_suffix(s) for s in (".xml", ".XML")]
+    xml = next((c for c in candidates if c.exists()), None)
+    if xml is None:
+        return None
+    try:
+        root = ET.parse(xml).getroot()
+    except ET.ParseError:
+        return None
+    found: dict[str, str] = {}
+    for el in root.iter():
+        tag = el.tag.rsplit("}", 1)[-1].lower()
+        text = (el.text or "").strip()
+        for key in _XML_NAME_TAGS:
+            if tag.endswith(key) and text and key not in found:
+                found[key] = " ".join(text.split())
+    return next((found[k] for k in _XML_NAME_TAGS if k in found), None)
+
+
 def read_relab_folder(root: str | os.PathLike, catalog: dict[str, str] | None = None) -> list[Spectrum]:
-    """Read every ``.tab`` under a folder (or zip). ``catalog`` can map file stems to readable names."""
+    """Read every ``.tab`` under a folder (or zip).
+
+    Names come from ``catalog`` (file stem -> name) if given, else from the XML label
+    beside each file, else the file stem. The stem is kept in brackets so every
+    spectrum stays traceable to its RELAB file.
+    """
     root = _extract_if_zip(Path(root))
     spectra = []
     for p in sorted(root.rglob("*.tab")):
@@ -320,10 +355,26 @@ def read_relab_folder(root: str | os.PathLike, catalog: dict[str, str] | None = 
         sp = read_relab_tab(p)
         if len(sp.wavelengths) < 10:
             continue
-        if catalog and p.stem.lower() in catalog:
-            sp.name = f"{catalog[p.stem.lower()]} [{p.stem}]"
+        name = catalog.get(p.stem.lower()) if catalog else None
+        name = name or relab_xml_name(p)
+        if name:
+            sp.name = f"{name} [{p.stem}]"
         spectra.append(sp)
     return spectra
+
+
+def read_mineral_list(path: str | os.PathLike) -> list[str]:
+    """Read a mineral list (one name per line, '#' comments allowed) as regex patterns.
+
+    Spaces match spaces or underscores, so "Olivine GDS70" matches splib07a's
+    "Olivine_GDS70.a_Fo89_165u_BECKb_AREF".
+    """
+    patterns = []
+    for line in Path(path).read_text(errors="replace").splitlines():
+        line = line.split("#", 1)[0].strip()
+        if line:
+            patterns.append(r"[\s_]+".join(re.escape(w) for w in line.split()))
+    return patterns
 
 
 def read_two_column(path: str | os.PathLike, name: str | None = None, source: str = "user") -> Spectrum:

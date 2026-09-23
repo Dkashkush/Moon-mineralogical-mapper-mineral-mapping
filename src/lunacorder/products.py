@@ -82,6 +82,14 @@ def write_summary(result: IdentificationResult, path: str | Path, valid: np.ndar
 # Map projection (nearest-neighbour to an equirectangular grid)
 # ---------------------------------------------------------------------------
 
+def unwrap_longitude(lon: np.ndarray) -> np.ndarray:
+    """Keep a strip that crosses the +/-180 deg meridian contiguous by switching to 0-360."""
+    finite = lon[np.isfinite(lon)]
+    if finite.size and finite.max() - finite.min() > 180:
+        return np.where(lon < 0, lon + 360.0, lon)
+    return lon
+
+
 def grid_to_equirectangular(lon: np.ndarray, lat: np.ndarray, bands: np.ndarray,
                             resolution_m: float | None = None, radius_m: float = 1737400.0):
     """Resample image-geometry bands onto a regular lon/lat grid.
@@ -97,6 +105,7 @@ def grid_to_equirectangular(lon: np.ndarray, lat: np.ndarray, bands: np.ndarray,
     bands = np.asarray(bands)
     if bands.ndim == 2:
         bands = bands[None]
+    lon = unwrap_longitude(lon)
     ok = np.isfinite(lon) & np.isfinite(lat)
     lat0 = np.deg2rad(np.nanmean(lat[ok]))
     m_per_deg = np.deg2rad(1.0) * radius_m
@@ -151,7 +160,7 @@ def write_geotiff(path: str | Path, grid: np.ndarray, transform: tuple, band_nam
 
 def write_map_products(result: IdentificationResult, lon: np.ndarray, lat: np.ndarray,
                        outdir: str | Path, prefix: str, params: dict[str, np.ndarray] | None = None,
-                       resolution_m: float | None = None) -> list[Path]:
+                       resolution_m: float | None = None, consensus: np.ndarray | None = None) -> list[Path]:
     """Map-project the key products to GeoTIFF."""
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
@@ -166,10 +175,35 @@ def write_map_products(result: IdentificationResult, lon: np.ndarray, lat: np.nd
     }
     if params:
         stacks["parameters"] = (np.stack(list(params.values())), list(params))
+    if consensus is not None:
+        stacks["consensus"] = (consensus.astype(np.float32), ["methods agreeing with feature fit (0-3)"])
     written = []
     for kind, (stack, names) in stacks.items():
         grid, transform, *_ = grid_to_equirectangular(lon, lat, stack, resolution_m)
         written.append(write_geotiff(outdir / f"{prefix}_{kind}_map.tif", grid, transform, names))
+    return written
+
+
+def write_ensemble_products(ens, outdir: str | Path, prefix: str) -> list[Path]:
+    """ENVI stacks (image geometry) for SAM/SID, LSMA, CEM and the consensus count."""
+    outdir = Path(outdir)
+    written = [
+        write_envi(outdir / f"{prefix}_samsid.img",
+                   _clean(np.dstack([ens.samsid_material.astype(np.float32), ens.sam_spectrum.astype(np.float32),
+                                     ens.sam_angle, ens.sid_value])),
+                   band_names=["SAM+SID agreed material", "SAM best library row", "SAM angle (rad)", "SID"],
+                   nodata=NODATA,
+                   extra={"class names": "{none, " + ", ".join(ens.material_names) + "}"}),
+        write_envi(outdir / f"{prefix}_cem.img", _clean(np.moveaxis(ens.cem_score, 0, -1)),
+                   band_names=ens.material_names, nodata=NODATA),
+        write_envi(outdir / f"{prefix}_consensus.img", ens.consensus.astype(np.float32),
+                   band_names=["methods agreeing with feature fit (0-3)"]),
+    ]
+    if ens.lsma_fractions is not None:
+        names = [*ens.endmember_names, "shade"] if ens.settings.lsma_shade else list(ens.endmember_names)
+        written.append(write_envi(outdir / f"{prefix}_lsma.img",
+                                  _clean(np.dstack([*ens.lsma_fractions, ens.lsma_rmse])),
+                                  band_names=[*names, "RMSE"], nodata=NODATA))
     return written
 
 
@@ -254,5 +288,76 @@ def plot_detection_spectra(result: IdentificationResult, cube: np.ndarray, wavel
                 ax.legend(fontsize=7, title=library.names[best_lib][:40], title_fontsize=6)
     fig.tight_layout()
     fig.savefig(path, dpi=200, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
+def plot_projected_map(result: IdentificationResult, colors: list[str], lon: np.ndarray, lat: np.ndarray,
+                       path: str | Path, background: np.ndarray | None = None, title: str = "",
+                       consensus: np.ndarray | None = None, resolution_m: float | None = None,
+                       radius_km: float = 1737.4):
+    """Publication figure on a lon/lat grid: mineral classes over albedo, lat/lon axes,
+    scale bar (Moon radius 1737.4 km), north arrow and legend. Pixels where two or more
+    independent methods agree with feature fitting are outlined in the legend count."""
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import to_rgb
+    from matplotlib.patches import Patch
+
+    from .parameters import stretch
+
+    layers = [result.group_class[0].astype(np.float32)]
+    if background is not None:
+        layers.append(background.astype(np.float32))
+    if consensus is not None:
+        layers.append(consensus.astype(np.float32))
+    grid, transform, lon_res, lat_res = grid_to_equirectangular(lon, lat, np.stack(layers), resolution_m)
+    cls = grid[0]
+    rgb = np.ones((*cls.shape, 3))
+    if background is not None:
+        bg = np.where(grid[1] == NODATA, np.nan, grid[1])
+        g = stretch(bg) * 0.8
+        rgb = np.dstack([g, g, g])
+        rgb[~np.isfinite(bg)] = 1.0
+    handles = []
+    for i, (name, col) in enumerate(zip(result.material_names, colors)):
+        mask = cls == i + 1
+        if mask.any():
+            rgb[mask] = to_rgb(col)
+            label = f"{name} ({mask.sum():,} px"
+            if consensus is not None:
+                label += f", {int((mask & (grid[-1] >= 2)).sum()):,} with ≥2 methods agreeing"
+            handles.append(Patch(color=col, label=label + ")"))
+    x0, lat_top = transform[0], transform[3]
+    extent = [x0, x0 + lon_res * cls.shape[1], lat_top - lat_res * cls.shape[0], lat_top]
+    lat_mid = 0.5 * (extent[2] + extent[3])
+
+    fig, ax = plt.subplots(figsize=(7, 10))
+    ax.imshow(rgb, extent=extent, interpolation="nearest",
+              aspect=1.0 / max(np.cos(np.deg2rad(lat_mid)), 1e-3))
+    ax.set_xlabel("Longitude (°E)")
+    ax.set_ylabel("Latitude (°N)")
+    ax.grid(color="0.5", lw=0.3, alpha=0.6)
+    ax.set_title(title or "Best-matching material")
+
+    # Scale bar: ~20 % of the map width, rounded to a nice number of km
+    km_per_deg_lon = np.pi * radius_km / 180.0 * np.cos(np.deg2rad(lat_mid))
+    width_km = (extent[1] - extent[0]) * km_per_deg_lon
+    nice = [1, 2, 5, 10, 20, 25, 50, 100, 200, 500]
+    bar_km = max([n for n in nice if n <= 0.25 * width_km] or [nice[0]])
+    bar_deg = bar_km / km_per_deg_lon
+    bx = extent[0] + 0.05 * (extent[1] - extent[0])
+    by = extent[2] + 0.03 * (extent[3] - extent[2])
+    ax.plot([bx, bx + bar_deg], [by, by], color="k", lw=4, solid_capstyle="butt")
+    ax.text(bx + bar_deg / 2, by, f"{bar_km} km\n", ha="center", va="bottom", fontsize=8)
+    # North arrow (map is north-up by construction)
+    nx = extent[1] - 0.08 * (extent[1] - extent[0])
+    ny = extent[3] - 0.06 * (extent[3] - extent[2])
+    dy = 0.05 * (extent[3] - extent[2])
+    ax.annotate("", xy=(nx, ny), xytext=(nx, ny - dy), arrowprops=dict(arrowstyle="-|>", color="k"))
+    ax.text(nx, ny, "N", ha="center", va="bottom", fontsize=10, fontweight="bold")
+    if handles:
+        ax.legend(handles=handles, loc="upper left", bbox_to_anchor=(1.02, 1), frameon=False, fontsize=8)
+    fig.tight_layout()
+    fig.savefig(path, dpi=300, bbox_inches="tight")
     plt.close(fig)
     return path

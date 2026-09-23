@@ -93,13 +93,41 @@ the M3 IBD products (Mustard et al., 2011):
 | IBD2000 | 1530–1590 | 2450–2500 | 1660–2500 |
 | IBD1250 | 930–1010 | 1520–1660 | 1110–1390 |
 
-## 5. Map projection
+## 5. Independent cross-checks (SAM + SID, LSMA, CEM)
+
+Feature fitting is the primary identification. Three whole-spectrum methods from the
+project's earlier notebooks run alongside it as independent evidence (`ensemble=True`):
+
+* **SAM + SID.** Pixel and library spectra are continuum-removed with an upper convex hull
+  (Clark & Roush, 1984), after optional Savitzky–Golay smoothing of the pixels (7 bands,
+  order 2). Each pixel is compared with *every* library spectrum by spectral angle
+  (≤ 0.10 rad; Kruse et al., 1993) and spectral information divergence (≤ 0.04; Chang,
+  2000). A match counts only where both select the same spectrum, and the material that
+  spectrum belongs to is reported. Spectra are never averaged into endmembers, because
+  averaging continuum-removed spectra of different compositions smears band positions.
+* **LSMA.** Fully constrained (non-negative, sum-to-one) unmixing of *reflectance*, with a
+  shade endmember (Adams et al., 1986). The endmembers are the reference spectra that feature
+  fitting chose most often. Fits with RMSE > 0.02 are rejected. Linear mixing is not valid in
+  continuum-removed space, and lunar regolith mixes intimately, so fractions are apparent
+  areal fractions, not modal abundances.
+* **CEM** (Harsanyi, 1993) on continuum-removed band-depth spectra (CR − 1), so the score does
+  not depend on brightness. It uses a Tikhonov-regularised correlation matrix of the scene. A
+  detection needs a score ≥ 0.5 **and** ≥ 3 robust standard deviations (1.4826 × MAD) above the
+  scene median. A fixed "top 1 %" rule is not used, because it always flags 1 % of pixels even
+  when the target is absent.
+
+SAM, SID and LSMA always assign some library spectrum, even to featureless pixels; they have
+no "none" answer. They therefore cannot replace feature fitting. They only confirm it. For
+each pixel detected by feature fitting, the **consensus** product (0–3) counts how many of
+the three methods name the same material, and `*_crosscheck.csv` gives agreement per material.
+
+## 6. Map projection
 
 Products are resampled by nearest neighbour onto an equirectangular longitude/latitude grid
 at the native pixel spacing (or `--resolution-m`). A cell stays empty if no pixel lies
 within one cell width. The CRS is the IAU Moon 2015 sphere (R = 1737.4 km).
 
-## 6. Known limitations
+## 7. Known limitations
 
 * The HCP 2 µm band often extends past 2.5 µm, so its right continuum lies inside the band
   and HCP depths are lower bounds.
