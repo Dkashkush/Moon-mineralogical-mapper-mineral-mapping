@@ -61,6 +61,13 @@ lunacorder map --folder M3_Project --scene m3g20090607t025544_v01 \
 ```
 
 To run on Google Colab, open [`notebooks/lunacorder_colab.ipynb`](notebooks/lunacorder_colab.ipynb).
+Its first cell clones the code and imports it directly (about 10–20 s) rather than pip-installing it:
+
+```python
+!git clone -q --depth 1 https://github.com/Dkashkush/Moon-mineralogical-mapper-mineral-mapping /content/lunacorder
+import sys; sys.path.insert(0, '/content/lunacorder/src')
+!pip install -q rasterio   # only needed for GeoTIFF output
+```
 
 ### Data you need
 

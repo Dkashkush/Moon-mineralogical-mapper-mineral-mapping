@@ -114,4 +114,4 @@ def write_scene(folder: Path, scene_id="m3g20090607t025544_v01", rows=60, cols=4
     return wl, truth, names
 
 
-__all__ = ["write_envi", "lab_spectra", "write_splib_like", "write_scene", "scene_truth", "BANDS"]
+__all__ = ["BANDS", "lab_spectra", "scene_truth", "write_envi", "write_scene", "write_splib_like"]

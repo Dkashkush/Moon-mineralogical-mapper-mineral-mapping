@@ -186,7 +186,7 @@ def plot_mineral_map(result: IdentificationResult, colors: list[str], path: str 
     from matplotlib.patches import Patch
 
     cls = result.group_class[group]
-    rgb = np.ones(cls.shape + (3,)) * 0.15
+    rgb = np.ones((*cls.shape, 3)) * 0.15
     if background is not None:
         from .parameters import stretch
         bg = stretch(background)

@@ -2,10 +2,10 @@
 
 __version__ = "0.1.0"
 
-from .expert import ExpertSystem  # noqa: E402
-from .identify import IdentificationResult, identify, resolve  # noqa: E402
-from .library import SpectralLibrary, Spectrum, build_library  # noqa: E402
-from .m3 import M3Scene  # noqa: E402
+from .expert import ExpertSystem
+from .identify import IdentificationResult, identify, resolve
+from .library import SpectralLibrary, Spectrum, build_library
+from .m3 import M3Scene
 
 __all__ = [
     "ExpertSystem",

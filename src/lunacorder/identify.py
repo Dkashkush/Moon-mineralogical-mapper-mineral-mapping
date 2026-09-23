@@ -31,7 +31,6 @@ from .continuum import local_continuum_removed
 from .expert import ExpertSystem, MaterialDef
 from .library import SpectralLibrary
 
-
 # ---------------------------------------------------------------------------
 # Resolving the expert system against a library and a sensor
 # ---------------------------------------------------------------------------

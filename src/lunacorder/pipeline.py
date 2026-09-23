@@ -8,14 +8,13 @@ from pathlib import Path
 
 import numpy as np
 
-from . import __version__
+from . import __version__, products
 from .envi import EnviImage
 from .expert import ExpertSystem
 from .identify import identify, resolve
 from .library import SpectralLibrary, build_library, read_relab_folder, read_two_column, read_usgs_splib07
 from .m3 import DEFAULT_RANGE_NM, M3Scene, fwhm_from_spacing, global_band_members
 from .parameters import band_parameters
-from . import products
 
 
 def build_scene_library(scene_header: str | Path, out: str | Path, usgs: str | Path | None = None,

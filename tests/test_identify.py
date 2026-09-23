@@ -7,7 +7,6 @@ from lunacorder.expert import ExpertSystem
 from lunacorder.identify import identify, resolve
 from lunacorder.library import build_library
 from lunacorder.m3 import fwhm_from_spacing, m3_global_wavelengths
-
 from synthetic import BANDS, absorbed, lab_spectra, scene_truth, write_scene
 
 WL = m3_global_wavelengths()
@@ -79,7 +78,7 @@ def test_end_to_end_scene(tmp_path, library):
     from lunacorder.pipeline import map_scene
 
     folder = tmp_path / "M3_Project"
-    wl, truth, names = write_scene(folder, noise=0.001)
+    _, truth, _ = write_scene(folder, noise=0.001)
     library.save(tmp_path / "lib.npz")
     with pytest.warns(UserWarning):
         result, extras = map_scene(folder, "m3g20090607t025544_v01", tmp_path / "lib.npz",

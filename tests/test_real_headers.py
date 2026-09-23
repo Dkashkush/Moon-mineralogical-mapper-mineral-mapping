@@ -43,7 +43,7 @@ def test_real_rfl_header(scene):
 def test_real_loc_is_float64_lon_lat(scene):
     assert scene.loc.dtype == np.dtype("<f8")  # LOC is double precision, unlike RFL/OBS
     assert scene.loc.band_names == ["Longitude", "Latitude", "Radius"]
-    lon, lat = scene.read_lonlat(slice(0, 2), slice(0, 2))
+    lon, _ = scene.read_lonlat(slice(0, 2), slice(0, 2))
     assert lon.shape == (2, 2)
 
 

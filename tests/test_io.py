@@ -2,10 +2,8 @@ import numpy as np
 import pytest
 
 from lunacorder.envi import EnviImage, find_header, parse_header
-from lunacorder.library import (SpectralLibrary, build_library, convolve, read_relab_tab,
-                                read_usgs_splib07)
+from lunacorder.library import SpectralLibrary, build_library, convolve, read_relab_tab, read_usgs_splib07
 from lunacorder.m3 import M3Scene, fwhm_from_spacing, m3_global_wavelengths
-
 from synthetic import BANDS, lab_spectra, write_scene, write_splib_like
 
 
@@ -20,7 +18,7 @@ def test_parse_multiline_header(tmp_path):
 
 
 def test_scene_reading_matches_what_was_written(tmp_path):
-    wl, truth, _ = write_scene(tmp_path)
+    wl, _, _ = write_scene(tmp_path)
     scene = M3Scene.from_folder(tmp_path, "m3g20090607t025544_v01")
     assert scene.obs is not None and scene.loc is not None  # upper-case OBS and *_loc_img.hdr found
     assert scene.rfl.interleave == "bil"
