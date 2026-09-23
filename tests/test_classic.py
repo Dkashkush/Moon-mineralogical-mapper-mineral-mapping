@@ -101,3 +101,30 @@ def test_unwrap_longitude_across_dateline():
     assert out.min() > 179 and out.max() < 181
     same = np.array([[10.0, 11.0]])
     np.testing.assert_array_equal(unwrap_longitude(same), same)
+
+
+def test_expert_reference_patterns_on_real_splib07a_names():
+    """Real names from the user's splib07a build; the Fo<50 exclusion once failed on '_Fo11_'."""
+    import warnings
+
+    from lunacorder.expert import ExpertSystem
+    from lunacorder.identify import _match_references
+    from lunacorder.library import SpectralLibrary
+
+    names = ["Olivine_GDS70.a_Fo89_165um_BECKb_AREF", "Olivine_HS285.2B_Fo80_ASDFRb_AREF",
+             "Olivine_KI3005_Fo11_lt60um_BECKb_AREF", "Olivine_KI3377_Fo18_lt60um_BECKb_AREF",
+             "Hypersthene_PYX02.a_12um_BECKc_AREF", "Pigeonite_HS199.3B_BECKc_AREF",
+             "Augite_WS592_Pyroxene_BECKb_AREF", "Diopside_HS15.3B_Pyroxene_BECKc_AREF",
+             "Anorthite_HS349.3B_Plagio_BECKc_AREF", "Fiberglass_GDS335_Wh_Roofing_ASDFRa_AREF",
+             "Chromite_HS281.1B_ASDFRc_AREF", "Synthetic Mg-spinel sintered 1350C [c1sp03]"]
+    lib = SpectralLibrary(names=names, wavelengths=np.zeros(1), spectra=np.zeros((len(names), 1)))
+    ex = ExpertSystem.builtin()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        got = {m.name: [names[i] for i in _match_references(lib, m)] for m in ex.materials}
+    assert got["Olivine"] == names[:2]
+    assert got["Low-Ca pyroxene"] == names[4:6]
+    assert got["High-Ca pyroxene"] == names[6:8]
+    assert got["Plagioclase"] == [names[8]]
+    assert got["Mg-spinel"] == [names[11]]
+    assert got["Fe-bearing glass"] == []

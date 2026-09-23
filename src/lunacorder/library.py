@@ -59,6 +59,11 @@ class SpectralLibrary:
         rx = re.compile(pattern, re.IGNORECASE)
         return [i for i, n in enumerate(self.names) if rx.search(n)]
 
+    def without_errorbars(self) -> "SpectralLibrary":
+        """Drop USGS 'errorbars_for_*' rows (libraries built before v0.1.1 included them)."""
+        keep = [i for i, n in enumerate(self.names) if not n.lower().startswith("errorbars")]
+        return self.subset(keep)
+
     def subset(self, indices) -> "SpectralLibrary":
         indices = list(indices)
         return SpectralLibrary(
@@ -213,11 +218,20 @@ def build_library(spectra: list[Spectrum], band_centres: np.ndarray, fwhm: np.nd
 # ---------------------------------------------------------------------------
 
 def _extract_if_zip(path: Path, workdir: Path | None = None) -> Path:
+    """Unzip into a local cache (not next to the zip).
+
+    On Colab the zip usually lives on Google Drive; extracting there writes thousands
+    of small files to Drive, which is slow and clutters the user's folder.
+    """
     if path.is_file() and path.suffix.lower() == ".zip":
-        target = (workdir or path.parent) / path.stem
-        if not target.exists():
+        import tempfile
+
+        base = workdir or Path(os.environ.get("LUNACORDER_CACHE", Path(tempfile.gettempdir()) / "lunacorder"))
+        target = Path(base) / path.stem
+        if not (target / ".complete").exists():
             with zipfile.ZipFile(path) as zf:
                 zf.extractall(target)
+            (target / ".complete").touch()
         return target
     return path
 
@@ -266,7 +280,8 @@ def read_usgs_splib07(root: str | os.PathLike, include: list[str] | None = None,
     exc = [re.compile(p, re.I) for p in (exclude or [])]
     spectra = []
     for p in sorted(txt_files):
-        if "Wavelengths_" in p.name or "Bandpass" in p.name:
+        # Wavelength/bandpass tables and per-spectrum error bars are not spectra
+        if "Wavelengths_" in p.name or "Bandpass" in p.name or p.name.lower().startswith("errorbars"):
             continue
         m = _USGS_SPEC_RX.search(p.name)
         if not m:

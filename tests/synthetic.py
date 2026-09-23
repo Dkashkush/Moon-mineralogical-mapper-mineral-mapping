@@ -52,6 +52,11 @@ def write_splib_like(root: Path) -> Path:
         refl[:5] = -1.23e34  # deleted channels
         (chap / f"splib07a_{name}_BECKb_AREF.txt").write_text(
             f"splib07a Record=1: {name}\n" + "\n".join(f"{r:.7e}" for r in refl) + "\n")
+        # splib07a also ships an uncertainty file per spectrum; it must not be read as a spectrum
+        errs = root / "errorbars"
+        errs.mkdir(exist_ok=True)
+        (errs / f"errorbars_for_splib07a_{name}_BECKb_AREF.txt").write_text(
+            f"errorbars for {name}\n" + "\n".join("1.0e-03" for _ in refl) + "\n")
     return root
 
 

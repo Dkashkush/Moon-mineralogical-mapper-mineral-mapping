@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -136,3 +138,21 @@ def test_subset_scene_roundtrip(tmp_path):
     np.testing.assert_array_equal(sub.read_lonlat()[1], scene.read_lonlat(slice(10, 25), slice(5, 30))[1])
     np.testing.assert_allclose(sub.wavelengths, scene.wavelengths)
     assert sub.obs is not None
+
+
+def test_splib_zip_is_extracted_to_cache_not_next_to_zip(tmp_path, monkeypatch):
+    import shutil
+
+    root = write_splib_like(tmp_path / "src" / "ASCIIdata_splib07a")
+    zip_path = Path(shutil.make_archive(str(tmp_path / "drive" / "ASCIIdata_splib07a"), "zip", root))
+    monkeypatch.setenv("LUNACORDER_CACHE", str(tmp_path / "cache"))
+    spectra = read_usgs_splib07(zip_path)
+    assert len(spectra) == len(BANDS)  # errorbar files are skipped
+    assert sorted(p.name for p in zip_path.parent.iterdir()) == ["ASCIIdata_splib07a.zip"]
+
+
+def test_library_without_errorbars():
+    wl = m3_global_wavelengths()
+    lib = build_library(lab_spectra(), wl, fwhm_from_spacing(wl), required_range=(540, 2500))
+    lib.names[0] = "errorbars_for_splib07a_X_BECKb_AREF"
+    assert len(lib.without_errorbars()) == len(lib) - 1
