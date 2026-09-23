@@ -5,7 +5,7 @@ import pytest
 
 from lunacorder.envi import EnviImage, find_header, parse_header
 from lunacorder.library import SpectralLibrary, build_library, convolve, read_relab_tab, read_usgs_splib07
-from lunacorder.m3 import M3Scene, fwhm_from_spacing, m3_global_wavelengths
+from lunacorder.m3 import M3Scene, find_scene_ids, fwhm_from_spacing, m3_global_wavelengths
 from synthetic import BANDS, lab_spectra, write_scene, write_splib_like
 
 
@@ -34,6 +34,20 @@ def test_scene_reading_matches_what_was_written(tmp_path):
     good = scene.good_bands()
     assert not good[:2].any()  # bbl bands 1-2
     assert scene.wavelengths[good].max() <= 2500
+
+
+def test_l1b_files_with_their_own_version_are_found(tmp_path):
+    # PDS downloads: L2 reflectance is _V01, L1B LOC/OBS are _V03, all upper case.
+    write_scene(tmp_path, scene_id="M3G20090607T025544_V01")
+    for f in list(tmp_path.iterdir()):
+        if "_loc" in f.name.lower() or "_obs" in f.name.lower():
+            f.rename(f.with_name(f.name.replace("_V01_", "_V03_")))
+    (tmp_path / "M3G20090607T025544_V02_OBS.IMG").write_bytes(b"")  # older version is ignored
+    assert find_scene_ids(tmp_path) == ["M3G20090607T025544_V01"]
+    scene = M3Scene.from_folder(tmp_path, "m3g20090607t025544_v01")
+    assert scene.loc.path.name.upper() == "M3G20090607T025544_V03_LOC.IMG"
+    assert scene.obs.path.name == "M3G20090607T025544_V03_OBS.IMG"
+    assert scene.read_geometry()["incidence"][10, 0] == pytest.approx(40.0)
 
 
 def test_loc_band_order_is_lon_lat(tmp_path):

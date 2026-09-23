@@ -77,7 +77,9 @@ import sys; sys.path.insert(0, '/content/lunacorder/src')
 ### Data you need
 
 * **M3 L2 scene** from the [PDS Orbital Data Explorer](https://ode.rsl.wustl.edu/moon/):
-  `*_rfl.img/.hdr` (reflectance), `*_loc.img/.hdr` (coordinates) and `*_obs.img/.hdr` (geometry).
+  `*_rfl.img/.hdr` (reflectance, Level 2), plus `*_loc.img/.hdr` (coordinates) and
+  `*_obs.img/.hdr` (geometry) from the Level 1B product of the same scene. The L1B version number
+  may differ (e.g. `_V03_LOC` next to `_V01_RFL`); it is matched automatically.
 * **Reference spectra:** [USGS splib07a](https://doi.org/10.5066/F7RR1WDJ) ASCII data, and
   optionally [RELAB](https://sites.brown.edu/relab/) lunar sample spectra.
 

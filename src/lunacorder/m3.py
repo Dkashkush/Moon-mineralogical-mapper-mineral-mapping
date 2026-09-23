@@ -123,13 +123,22 @@ class M3Scene:
         """Open ``<scene_id>_rfl.img`` (+ ``_loc``/``_obs`` if present) in ``folder``.
 
         Filename matching is case-insensitive because PDS OBS files are often
-        upper case (``M3G..._OBS.IMG``).
+        upper case (``M3G..._OBS.IMG``). LOC/OBS come from the L1B product, whose
+        version number can differ from the L2 reflectance (``..._V03_LOC.IMG`` next
+        to ``..._V01_RFL.IMG``), so for those any version of the same scene is
+        accepted, highest first.
         """
         folder = Path(folder)
         files = {p.name.lower(): p for p in folder.iterdir()}
+        stem = re.sub(r"_v\d+$", "", scene_id.lower())
 
         def pick(kind: str) -> Path | None:
-            return files.get(f"{scene_id}_{kind}.img".lower())
+            exact = files.get(f"{scene_id}_{kind}.img".lower())
+            if exact is not None or kind == "rfl":
+                return exact
+            pattern = re.compile(rf"{re.escape(stem)}_v(\d+)_{kind}\.img")
+            versions = [(int(m.group(1)), name) for name in files if (m := pattern.fullmatch(name))]
+            return files[max(versions)[1]] if versions else None
 
         rfl_path = pick("rfl")
         if rfl_path is None:
@@ -219,6 +228,12 @@ class M3Scene:
                 break
         block = self.obs.read(rows, cols, mask_nodata=False)
         return {k: block[:, :, i] for k, i in idx.items()}
+
+
+def find_scene_ids(folder: str | os.PathLike) -> list[str]:
+    """Scene IDs of every ``*_rfl.img`` in ``folder`` (any case), e.g. ``M3G20090607T025544_V01``."""
+    return sorted(p.name[: -len("_rfl.img")] for p in Path(folder).iterdir()
+                  if p.name.lower().endswith("_rfl.img"))
 
 
 def subset_scene(scene: M3Scene, outdir: str | os.PathLike, rows: slice, cols: slice = slice(None)) -> Path:
