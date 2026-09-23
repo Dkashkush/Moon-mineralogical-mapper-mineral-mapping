@@ -128,3 +128,16 @@ def test_expert_reference_patterns_on_real_splib07a_names():
     assert got["Plagioclase"] == [names[8]]
     assert got["Mg-spinel"] == [names[11]]
     assert got["Fe-bearing glass"] == []
+
+
+def test_relab_name_from_real_pds4_label(tmp_path):
+    """Real RELAB label layout: the name is speclib:specimen_name, not <title>."""
+    import shutil
+    from pathlib import Path
+
+    label = Path(__file__).parent / "data" / "relab" / "c1ag52.xml"
+    shutil.copy(label, tmp_path / "c1ag52.xml")
+    rows = "\n".join(f"{w} 0.2 0.001" for w in range(320, 2605, 5))
+    (tmp_path / "c1ag52.tab").write_text("457\n" + rows + "\n")
+    (spectrum,) = read_relab_folder(tmp_path)
+    assert spectrum.name == "Agglutinate- 130103 Floor [c1ag52]"

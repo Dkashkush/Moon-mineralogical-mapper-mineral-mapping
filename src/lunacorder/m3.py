@@ -18,6 +18,7 @@ the SIS order as a documented fallback.
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -232,4 +233,43 @@ def subset_scene(scene: M3Scene, outdir: str | os.PathLike, rows: slice, cols: s
         image = getattr(scene, kind)
         if image is not None:
             write_subset(image, outdir / f"{scene.scene_id}_{kind}.img", rows, cols)
+    return outdir
+
+
+def share_parts(scene: M3Scene, outdir: str | os.PathLike, rows: slice, lines_per_part: int = 20) -> list[Path]:
+    """Write ``rows`` as several small self-contained subsets (``part_00``, ``part_01``, ...).
+
+    Each 20-line part of a full-width global-mode scene is ~2 MB, small enough to share
+    through connectors with tight file-size limits. Rejoin them with :func:`join_parts`.
+    """
+    outdir = Path(outdir)
+    start, stop = rows.start or 0, rows.stop if rows.stop is not None else scene.rfl.lines
+    parts = []
+    for n, r0 in enumerate(range(start, stop, lines_per_part)):
+        parts.append(subset_scene(scene, outdir / f"part_{n:02d}", slice(r0, min(r0 + lines_per_part, stop))))
+    return parts
+
+
+def join_parts(parts: list[str | os.PathLike], outdir: str | os.PathLike, scene_id: str) -> Path:
+    """Concatenate subsets written by :func:`share_parts` (in order) back into one scene folder."""
+    outdir = Path(outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+    scenes = [M3Scene.from_folder(p, scene_id) for p in parts]
+    for kind in ("rfl", "loc", "obs"):
+        images = [getattr(sc, kind) for sc in scenes]
+        if any(im is None for im in images):
+            continue
+        first = images[0]
+        if first.interleave not in ("bil", "bip"):
+            raise ValueError("join_parts supports line-interleaved (BIL/BIP) images")
+        out_img = outdir / f"{scene_id}_{kind}.img"
+        with open(out_img, "wb") as fh:
+            for im in images:
+                fh.write(im.path.read_bytes())
+        total = sum(im.lines for im in images)
+        from .envi import find_header
+
+        text = find_header(first.path).read_text(errors="replace")
+        text = re.sub(r"(?im)^(\s*lines\s*=\s*)\d+", rf"\g<1>{total}", text)
+        out_img.with_suffix(".hdr").write_text(text)
     return outdir

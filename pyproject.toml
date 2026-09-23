@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lunacorder"
-version = "0.1.0"
+version = "0.1.1"
 description = "Tetracorder-style mineral identification for Chandrayaan-1 Moon Mineralogy Mapper (M3) data"
 readme = "README.md"
 requires-python = ">=3.10"

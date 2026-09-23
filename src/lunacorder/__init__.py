@@ -1,6 +1,6 @@
 """lunacorder – Tetracorder-style mineral identification for Chandrayaan-1 M3 data."""
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 from .expert import ExpertSystem
 from .identify import IdentificationResult, identify, resolve

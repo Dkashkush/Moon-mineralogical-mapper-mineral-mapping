@@ -156,3 +156,16 @@ def test_library_without_errorbars():
     lib = build_library(lab_spectra(), wl, fwhm_from_spacing(wl), required_range=(540, 2500))
     lib.names[0] = "errorbars_for_splib07a_X_BECKb_AREF"
     assert len(lib.without_errorbars()) == len(lib) - 1
+
+
+def test_share_parts_roundtrip(tmp_path):
+    from lunacorder.m3 import join_parts, share_parts
+
+    write_scene(tmp_path / "full")
+    scene = M3Scene.from_folder(tmp_path / "full", "m3g20090607t025544_v01")
+    parts = share_parts(scene, tmp_path / "share", slice(5, 50), lines_per_part=20)
+    assert [p.name for p in parts] == ["part_00", "part_01", "part_02"]
+    joined = M3Scene.from_folder(join_parts(parts, tmp_path / "joined", "m3g20090607t025544_v01"),
+                                 "m3g20090607t025544_v01")
+    np.testing.assert_array_equal(joined.read_reflectance(), scene.read_reflectance(slice(5, 50)))
+    np.testing.assert_array_equal(joined.read_lonlat()[1], scene.read_lonlat(slice(5, 50))[1])

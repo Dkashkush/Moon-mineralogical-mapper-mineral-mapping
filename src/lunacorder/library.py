@@ -88,15 +88,23 @@ class SpectralLibrary:
 
     @classmethod
     def load(cls, path: str | os.PathLike) -> "SpectralLibrary":
+        """Load a saved library. USGS error-bar rows (from builds before v0.1.1) are dropped."""
         with np.load(path, allow_pickle=False) as data:
             fwhm = data["fwhm"]
-            return cls(
+            lib = cls(
                 names=[str(n) for n in data["names"]],
                 wavelengths=data["wavelengths"],
                 spectra=data["spectra"],
                 fwhm=fwhm if fwhm.size else None,
                 sources=[str(s) for s in data["sources"]],
             )
+        clean = lib.without_errorbars()
+        if len(clean) < len(lib):
+            import warnings
+
+            warnings.warn(f"{path}: dropped {len(lib) - len(clean)} USGS error-bar rows; rebuild the "
+                          "library with lunacorder >= 0.1.1", stacklevel=2)
+        return clean
 
     def to_envi_sli(self, path: str | os.PathLike) -> Path:
         """Export as an ENVI spectral library (.sli + .hdr) for use in ENVI/QGIS."""
