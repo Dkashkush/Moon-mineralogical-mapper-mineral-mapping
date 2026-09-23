@@ -1,0 +1,136 @@
+# Lunar expert system for Chandrayaan-1 M3 global-mode reflectance (lunacorder).
+#
+# Every material lists the absorption features that identify it, each defined
+# by a left and right continuum interval in nanometres (Tetracorder convention:
+# the fitted window runs from the start of the left interval to the end of the
+# right interval). Rules are deliberately few and physically motivated, so each
+# one can be cited and defended in a paper. Tune thresholds against spectra
+# from your own scene before publishing, and report the values you used.
+#
+# Key spectroscopy (see docs/METHOD.md for full references):
+#   Olivine      – broad composite 1.05 um band, no 2 um band (Burns 1993; Sunshine & Pieters 1998)
+#   Pyroxenes    – paired bands; LCP ~0.90-0.93 & ~1.9 um, HCP ~0.97-1.05 & ~2.2-2.3 um
+#                  (Adams 1974; Cloutis & Gaffey 1991; Klima et al. 2011)
+#   Plagioclase  – Fe2+ band near 1.25 um, detectable when mafics are scarce
+#                  (Ohtake et al. 2009; Cheek et al. 2013)
+#   Mg-spinel    – strong 2 um band with no 1 um band (Pieters et al. 2011)
+#   Fe-glass     – broad 1.0-1.15 & 1.9-2.0 um bands (Horgan et al. 2014)
+#
+# Windows below are chosen for M3 global mode: 20 nm sampling up to 1549 nm and
+# 40 nm sampling beyond, with 540-2500 nm usable (bands 1-2 and thermally
+# affected bands >2.5 um excluded). Pyroxenes share identical windows so their
+# fit x depth scores compete on equal terms; band position is resolved by shape.
+
+name: lunar-m3-v0.1
+wavelength_range_nm: [540, 2500]
+
+groups:
+  mafic: "Fe2+ crystal-field absorptions of lunar silicates, oxides and glass"
+
+materials:
+  - name: Olivine
+    group: mafic
+    color: "#1b9e77"
+    references: ["^Olivine"]
+    exclude: ["Fo(?:[0-4]?\\d)\\b"]          # keep Mg-rich olivine (Fo >= 50) typical of the Moon
+    features:
+      - name: 1 um composite band
+        left: [690, 760]
+        right: [1540, 1660]
+    absent:
+      - name: 2 um pyroxene band
+        left: [1540, 1660]
+        right: [2380, 2500]
+        max_depth: 0.03
+    min_fit: 0.85
+    min_depth: 0.03
+    min_snr: 3
+
+  - name: Low-Ca pyroxene
+    group: mafic
+    color: "#377eb8"
+    references: ["^Enstatite", "^Bronzite", "^Hypersthene", "^Orthopyroxene", "^Pigeonite"]
+    features:
+      - name: 1 um band
+        left: [690, 760]
+        right: [1290, 1450]
+      - name: 2 um band
+        left: [1450, 1620]
+        right: [2380, 2500]
+    min_fit: 0.85
+    min_depth: 0.03
+    min_snr: 3
+
+  - name: High-Ca pyroxene
+    group: mafic
+    color: "#7570b3"
+    references: ["^Augite", "^Diopside", "^Hedenbergite", "^Clinopyroxene"]
+    features:
+      - name: 1 um band
+        left: [690, 760]
+        right: [1290, 1450]
+      - name: 2 um band
+        left: [1450, 1620]
+        right: [2380, 2500]
+    min_fit: 0.85
+    min_depth: 0.03
+    min_snr: 3
+    notes: >-
+      The HCP 2 um band often extends beyond 2.5 um, so its right continuum is
+      inside the band; depths are therefore lower bounds.
+
+  - name: Plagioclase
+    group: mafic
+    color: "#e6ab02"
+    references: ["^Anorthite", "^Bytownite", "^Labradorite", "^Plagioclase"]
+    features:
+      - name: 1.25 um band
+        left: [930, 1010]
+        right: [1520, 1660]
+    absent:
+      - name: 2 um pyroxene band
+        left: [1450, 1620]
+        right: [2380, 2500]
+        max_depth: 0.03
+    min_fit: 0.85
+    min_depth: 0.02
+    min_snr: 3
+    notes: >-
+      Only crystalline plagioclase with minor Fe shows the 1.25 um band; maps
+      the purest anorthosites (PAN), not total plagioclase abundance.
+
+  - name: Mg-spinel
+    group: mafic
+    color: "#e7298a"
+    references: ["^Spinel"]
+    features:
+      - name: 2 um band
+        left: [1400, 1560]
+        right: [2380, 2500]
+    absent:
+      - name: 1 um mafic band
+        left: [690, 760]
+        right: [1290, 1450]
+        max_depth: 0.03
+    min_fit: 0.85
+    min_depth: 0.03
+    min_snr: 3
+
+  - name: Fe-bearing glass
+    group: mafic
+    color: "#d95f02"
+    references: ["glass", "74220", "74001", "15426"]
+    exclude: ["Obsidian", "Fiberglass", "Glass_(?:Window|Bottle)"]
+    features:
+      - name: 1 um band
+        left: [690, 760]
+        right: [1540, 1660]
+      - name: 2 um band
+        left: [1540, 1660]
+        right: [2380, 2500]
+    min_fit: 0.85
+    min_depth: 0.03
+    min_snr: 3
+    notes: >-
+      Needs lunar or synthetic Fe-glass references (e.g. RELAB Apollo 17
+      orange glass 74220). Skipped automatically if none are in the library.
