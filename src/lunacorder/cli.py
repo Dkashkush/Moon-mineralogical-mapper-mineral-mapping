@@ -51,6 +51,8 @@ def main(argv: list[str] | None = None) -> None:
     m.add_argument("--max-emission", type=float, help="mask pixels above this emission angle (deg)")
     m.add_argument("--max-phase", type=float, help="mask pixels above this phase angle (deg)")
     m.add_argument("--no-ensemble", action="store_true", help="skip SAM+SID, LSMA and CEM cross-checks")
+    m.add_argument("--destripe", choices=["strip", "window", "none"], default="strip",
+                   help="cross-track destriping: gains from the whole strip (default), the window, or off")
     m.add_argument("--resolution-m", type=float, help="map-projected cell size (default: native)")
     m.add_argument("--no-geotiff", action="store_true")
     m.add_argument("--no-figures", action="store_true")
@@ -81,7 +83,8 @@ def main(argv: list[str] | None = None) -> None:
                            max_incidence=args.max_incidence, map_project=not args.no_geotiff,
                            figures=not args.no_figures, resolution_m=args.resolution_m,
                            max_emission=args.max_emission, max_phase=args.max_phase,
-                           ensemble=not args.no_ensemble)
+                           ensemble=not args.no_ensemble,
+                           destripe=None if args.destripe == "none" else args.destripe)
 
 
 if __name__ == "__main__":

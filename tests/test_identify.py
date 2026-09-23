@@ -139,3 +139,15 @@ def test_absent_rule_is_robust_to_noise(resolved):
         res = identify(pixels[None], resolved)
         hit = res.group_class[0, 0] == names.index(material) + 1
         assert hit.mean() > 0.95, f"{material}: {hit.mean():.2%}"
+
+
+def test_weak_pyroxene_is_not_called_spinel(resolved):
+    """Regression from the first real M3 run: mature soil with a weak 1 um band and a 2 um band
+    passed the absolute 1 um limit (0.03) and was labelled Mg-spinel."""
+    names = [m.name for m in resolved.expert.materials]
+    weak_px = absorbed(WL, [(930, 90, 0.05), (1980, 220, 0.06)], base=0.13)
+    true_spinel = absorbed(WL, BANDS["Spinel_SYN5"], base=0.13)
+    res = identify(np.stack([weak_px, true_spinel])[None], resolved)
+    spinel = names.index("Mg-spinel") + 1
+    assert res.group_class[0, 0, 0] != spinel
+    assert res.group_class[0, 0, 1] == spinel

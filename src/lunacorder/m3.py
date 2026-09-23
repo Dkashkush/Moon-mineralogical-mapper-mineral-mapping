@@ -273,3 +273,45 @@ def join_parts(parts: list[str | os.PathLike], outdir: str | os.PathLike, scene_
         text = re.sub(r"(?im)^(\s*lines\s*=\s*)\d+", rf"\g<1>{total}", text)
         out_img.with_suffix(".hdr").write_text(text)
     return outdir
+
+
+def column_gains(cube: np.ndarray, good: np.ndarray | None = None) -> np.ndarray:
+    """Per-column, per-band multiplicative spectral gains (samples, bands) for destriping.
+
+    M3 pushbroom data show along-track stripes: each detector column has a slightly
+    different spectral response, which creates false band depths in whole columns (seen in
+    the first real-data test as stripes in every IBD map and 3x more detections in the edge
+    columns). Each pixel is first divided by its own mean over the good bands, so real albedo
+    differences are not removed; only each column's *spectral shape* is compared with the
+    scene median shape. Use as many lines as possible (ideally the whole strip).
+    """
+    cube = np.asarray(cube, dtype=np.float64)
+    good = np.ones(cube.shape[-1], bool) if good is None else np.asarray(good, bool)
+    import warnings
+
+    with np.errstate(invalid="ignore", divide="ignore"), warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)  # all-NaN fill columns / bad bands
+        shape = cube / np.nanmean(cube[..., good], axis=-1, keepdims=True)
+        col = np.nanmedian(shape, axis=0)  # (samples, bands)
+        ref = np.nanmedian(col, axis=0)  # (bands,)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        gains = col / ref
+    gains[~np.isfinite(gains)] = 1.0
+    return gains.astype(np.float32)
+
+
+def scene_column_gains(scene: "M3Scene", good: np.ndarray | None = None, target_lines: int = 1000,
+                       cols: slice = slice(None)) -> np.ndarray:
+    """Destriping gains from ~``target_lines`` lines spread evenly over the whole strip.
+
+    Every line is used for short scenes; a full 17,868-line strip is sampled every
+    ~18th line, which keeps memory low while averaging out local geology.
+    """
+    step = max(1, scene.rfl.lines // target_lines)
+    sample = scene.read_reflectance(slice(None, None, step), cols)
+    return column_gains(sample, good)
+
+
+def destripe(cube: np.ndarray, gains: np.ndarray) -> np.ndarray:
+    """Divide each column's spectra by its gains (from :func:`column_gains`)."""
+    return (cube / gains[None, :, :]).astype(cube.dtype)

@@ -22,6 +22,20 @@ al., 2013), 85 bands from 461 to 2976 nm. Data type, fill value (`data ignore va
   photometrically normalised to i = 30°, e = 0°, g = 30°, so no further photometric
   correction is applied.
 
+### Cross-track destriping
+
+M3 is a pushbroom imager: every image column comes from one detector element, and small
+differences in spectral response between elements create along-track stripes. In the first
+real-data test (scene m3g20090607t025544_v01, lines 3000–3149), IBD1000 column medians varied
+by twice the pixel noise, and 30 % of pixels in the edge columns (270–303) were labelled low-Ca
+pyroxene against 9 % elsewhere. Before identification, each pixel is divided by its own mean
+reflectance over the good bands, so albedo is preserved. The median of these shapes along each
+column is compared with the scene median, and the ratio gives a per-column, per-band gain. By
+default the gains come from about 1,000 lines spread over the whole strip, so local geology
+averages out. Dividing by these gains reduced the IBD1000 column jitter from 0.121 to 0.018,
+well below the per-pixel noise (0.057). Destriping can be disabled (`--destripe none`) or
+estimated from the mapped window only.
+
 ## 2. Reference library
 
 Laboratory spectra are resampled to the scene's own band centres λᵢ:
@@ -72,7 +86,12 @@ A material is detected when all of the following hold:
 
 * F ≥ `min_fit`, D ≥ `min_depth` and D/σ_D ≥ `min_snr`;
 * b > 0 for every feature, and each feature meets its own `min_fit` if one is set;
-* every **absent** feature has a fitted depth ≤ `max_depth`.
+* every **absent** feature has a fitted depth ≤ `max_depth`, and, where `max_ratio` is set,
+  ≤ `max_ratio` × the material's fitted depth. Mature lunar soil has shallow bands
+  everywhere, so an absolute limit alone is too permissive. For Mg-spinel the 1 µm band must
+  be < 25 % of the 2 µm band depth (Pieters et al., 2011 describe spinel as having essentially
+  no 1 µm band). On the real test area, the absolute rule alone gave 84 "spinel" pixels whose
+  spectra were weakly pyroxene-bearing soil; the ratio rule removes them.
 
 The absent-feature depth is not the noisy single-band minimum. It is the least-squares
 amplitude of a half-sine band template spanning that window's continuum. Fitting all bands

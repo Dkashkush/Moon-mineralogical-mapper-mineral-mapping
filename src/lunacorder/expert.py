@@ -27,6 +27,7 @@ YAML layout::
             left: [1540, 1660]
             right: [2380, 2500]
             max_depth: 0.03
+            max_ratio: 0.25                # optional: also <= 25 % of the diagnostic band depth
         min_fit: 0.85
         min_depth: 0.03
         min_snr: 3
@@ -55,6 +56,7 @@ class AbsentDef:
     left: tuple[float, float]
     right: tuple[float, float]
     max_depth: float
+    max_ratio: float | None = None  # also require depth <= max_ratio x the material's fitted depth
 
 
 @dataclass
@@ -108,7 +110,8 @@ class ExpertSystem:
                                      min_fit=float(f.get("min_fit", 0.0)))
                           for f in m["features"]],
                 absent=[AbsentDef(name=a["name"], left=_pair(a["left"]), right=_pair(a["right"]),
-                                  max_depth=float(a["max_depth"]))
+                                  max_depth=float(a["max_depth"]),
+                                  max_ratio=float(a["max_ratio"]) if "max_ratio" in a else None)
                         for a in m.get("absent", [])],
                 min_fit=float(m.get("min_fit", 0.8)),
                 min_depth=float(m.get("min_depth", 0.02)),

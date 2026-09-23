@@ -52,6 +52,7 @@ class _Absent:
     right: np.ndarray
     window: np.ndarray
     max_depth: float
+    max_ratio: float | None = None
 
 
 @dataclass
@@ -121,7 +122,7 @@ def resolve(expert: ExpertSystem, library: SpectralLibrary, wavelengths: np.ndar
                 raise ValueError(f"{mat.name}: absent-feature '{a.name}' has no usable continuum bands")
             window = np.arange(left[0], right[-1] + 1)
             window = window[usable[window]]
-            absent[mi].append(_Absent(left, right, window, a.max_depth))
+            absent[mi].append(_Absent(left, right, window, a.max_depth, a.max_ratio))
 
         candidates = _match_references(library, mat)
         if not candidates:
@@ -276,8 +277,12 @@ def identify(cube: np.ndarray, resolved: ResolvedExpert, chunk_pixels: int = 100
                 continue
             # Absent-feature rules depend only on the pixel, not the reference
             allowed = np.ones(stop - start, bool)
+            ratio_rules = []
             for rule in resolved.absent[mi]:
-                allowed &= absent_depth(wl, block, rule) <= rule.max_depth
+                a_depth = absent_depth(wl, block, rule)
+                allowed &= a_depth <= rule.max_depth
+                if rule.max_ratio is not None:
+                    ratio_rules.append((a_depth, rule.max_ratio))
 
             best_score = np.full(stop - start, -1.0)
             for ref in refs:
@@ -297,6 +302,9 @@ def identify(cube: np.ndarray, resolved: ResolvedExpert, chunk_pixels: int = 100
                     snr = np.where(s_tot > 0, d_tot / s_tot, np.inf)
                 passes = (allowed & feature_ok & (f_tot >= mat.min_fit)
                           & (d_tot >= mat.min_depth) & (snr >= mat.min_snr))
+                # Relative absence: the unwanted band must be weak compared with the diagnostic one
+                for a_depth, max_ratio in ratio_rules:
+                    passes &= a_depth <= max_ratio * d_tot
                 # Rank references by score, preferring any that pass all rules
                 ranked = np.where(passes, score + 10.0, score)
                 better = ranked > best_score

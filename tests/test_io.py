@@ -169,3 +169,22 @@ def test_share_parts_roundtrip(tmp_path):
                                  "m3g20090607t025544_v01")
     np.testing.assert_array_equal(joined.read_reflectance(), scene.read_reflectance(slice(5, 50)))
     np.testing.assert_array_equal(joined.read_lonlat()[1], scene.read_lonlat(slice(5, 50))[1])
+
+
+def test_destripe_removes_column_spectral_artefact_but_keeps_albedo():
+    from lunacorder.m3 import column_gains, destripe
+
+    rng = np.random.default_rng(0)
+    wl = m3_global_wavelengths()
+    base = 0.1 + 1e-4 * (wl - 500)
+    albedo = rng.uniform(0.7, 1.3, (200, 50, 1))  # real brightness variation
+    cube = albedo * base[None, None, :] * (1 + rng.normal(0, 0.002, (200, 50, 85)))
+    stripe = 1 - 0.05 * np.exp(-0.5 * ((wl - 1000) / 80) ** 2)  # fake 1 um "band" in one column
+    striped = cube.copy()
+    striped[:, 17] *= stripe
+    fixed = destripe(striped, column_gains(striped))
+    err_before = np.abs(striped[:, 17] / cube[:, 17] - 1).max()
+    err_after = np.abs(fixed[:, 17] / cube[:, 17] - 1).max()
+    assert err_before > 0.04 and err_after < 0.01
+    # albedo differences between pixels survive
+    np.testing.assert_allclose(fixed[:, 3, 40] / fixed[:, 4, 40], cube[:, 3, 40] / cube[:, 4, 40], rtol=0.02)

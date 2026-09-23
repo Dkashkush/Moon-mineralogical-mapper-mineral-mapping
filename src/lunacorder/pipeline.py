@@ -72,11 +72,15 @@ def map_scene(folder: str | Path, scene_id: str, library: str | Path | SpectralL
               max_incidence: float | None = 85.0, map_project: bool = True,
               figures: bool = True, resolution_m: float | None = None,
               max_emission: float | None = None, max_phase: float | None = None,
-              ensemble: bool = True, ensemble_settings=None):
+              ensemble: bool = True, ensemble_settings=None, destripe: str | None = "strip"):
     """Identify minerals in (a window of) an M3 scene and write all products.
 
     ``ensemble`` also runs SAM + SID, LSMA and CEM and cross-checks them against
     feature fitting (see :mod:`lunacorder.ensemble`).
+
+    ``destripe`` removes along-track detector-column stripes: ``"strip"`` estimates the
+    column gains from the whole scene strip (every 20th line), ``"window"`` from the
+    window being mapped, ``None`` disables it.
     """
     t0 = time.time()
     outdir = Path(outdir)
@@ -95,6 +99,14 @@ def map_scene(folder: str | Path, scene_id: str, library: str | Path | SpectralL
 
     print(f"Reading reflectance rows {rows.start}:{rows.stop}, cols {cols.start}:{cols.stop} ...")
     cube = scene.read_reflectance(rows, cols)
+    if destripe:
+        from .m3 import column_gains, scene_column_gains
+        from .m3 import destripe as apply_destripe
+
+        gains = scene_column_gains(scene, good, cols=cols) if destripe == "strip" else column_gains(cube, good)
+        cube = apply_destripe(cube, gains)
+        print(f"Destriped ({destripe}): column gains {np.percentile(gains[:, good], 1):.3f}-"
+              f"{np.percentile(gains[:, good], 99):.3f}")
     valid = np.all(np.isfinite(cube[..., good]), axis=-1)
     masks = {"incidence": max_incidence, "emission": max_emission, "phase": max_phase}
     if scene.obs is not None and any(v is not None for v in masks.values()):
@@ -151,6 +163,7 @@ def map_scene(folder: str | Path, scene_id: str, library: str | Path | SpectralL
         "max_incidence_deg": max_incidence,
         "max_emission_deg": max_emission,
         "max_phase_deg": max_phase,
+        "destripe": destripe,
         "valid_pixels": int(valid.sum()),
         "ensemble": None if ens is None else {
             "settings": vars(ens.settings),

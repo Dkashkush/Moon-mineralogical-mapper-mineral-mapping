@@ -43,6 +43,15 @@ against the real PDS headers of scene `m3g20090607t025544_v01` (kept in
 | Photometric masks: emission > 30°, phase > 90° | reasonable options, but with the wrong OBS indices they masked everything | available as `max_emission` / `max_phase` (off by default); incidence > 85° masked by default |
 | Savitzky–Golay (7 bands) before all analysis | on M3's 20/40 nm spacing, 7 bands spans 140–280 nm, which can flatten narrow features | applied only to SAM/SID input; feature fitting uses unsmoothed data |
 
+## Found on the first real-data run (lines 3000–3149 of m3g20090607t025544_v01)
+
+| Problem | Evidence | Handling |
+|---|---|---|
+| 613 of 2,196 library rows were USGS `errorbars_for_*` files | library listing | skipped by the reader; dropped automatically when older libraries are loaded |
+| Along-track detector stripes produced false band depths | IBD maps striped; 30 % vs 9 % LCP detections in edge vs other columns | cross-track destriping (METHOD §1) |
+| Weakly pyroxene-bearing soil labelled Mg-spinel | 84 pixels; their 1 µm band (0.013) was as deep as in LCP pixels | relative absent-band rule (`max_ratio` 0.25), spinel `min_fit` 0.90 |
+| An undetected material's first reference became an LSMA/CEM endmember | a featureless lab glass "explained" every pixel | endmembers only for detected materials, plus a scene-median background endmember |
+
 ## References to re-check
 
 Several reference entries in the conversation summaries pair an author and year with the

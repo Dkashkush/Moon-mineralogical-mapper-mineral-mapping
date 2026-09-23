@@ -57,18 +57,17 @@ def row_materials(library: SpectralLibrary, resolved: ResolvedExpert) -> np.ndar
 
 
 def choose_endmembers(resolved: ResolvedExpert, result: IdentificationResult) -> dict[int, int]:
-    """One reference spectrum per material: the one that won most often in feature fitting.
+    """One reference spectrum per *detected* material: the one that won most often.
 
-    This picks endmembers from the data rather than by hand. Materials never
-    detected fall back to their first reference.
+    Materials that feature fitting never detected get no endmember. Falling back to an
+    arbitrary reference let a nearly featureless lab glass absorb the whole scene in the
+    first real-data test (mature lunar soil is itself nearly featureless).
     """
     chosen = {}
     for mi in range(len(result.material_names)):
-        refs = resolved.references_for(mi)
-        if not refs:
-            continue
         winners = result.best_reference[mi][result.detected[mi]]
-        chosen[mi] = int(np.bincount(winners).argmax()) if winners.size else refs[0].library_index
+        if winners.size and resolved.references_for(mi):
+            chosen[mi] = int(np.bincount(winners).argmax())
     return chosen
 
 
@@ -102,13 +101,22 @@ def run_ensemble(cube: np.ndarray, wavelengths: np.ndarray, good: np.ndarray, li
 
     frac = rmse = dominant = None
     if s.lsma and em_mats:
+        # Local background: the scene's median spectrum, i.e. the "average soil" a detection
+        # has to stand out from (common practice in lunar unmixing).
+        valid_pix = pix[np.all(np.isfinite(pix), axis=1)]
+        background = np.median(valid_pix, axis=0)[None, :]
+        em_all = np.vstack([em, background])
+        em_names = [*em_names, "scene background (median spectrum)"]
         if progress:
-            print(f"LSMA with {len(em_mats)} endmembers{' + shade' if s.lsma_shade else ''} ...", flush=True)
-        frac, rmse = classic.lsma(pix, em, shade=s.lsma_shade, progress=progress)
-        mineral = frac[:, : len(em_mats)]
+            print(f"LSMA with {len(em_mats)} mineral endmember(s) + background"
+                  f"{' + shade' if s.lsma_shade else ''} ...", flush=True)
+        frac, rmse = classic.lsma(pix, em_all, shade=s.lsma_shade, progress=progress)
+        non_shade = frac[:, : len(em_mats) + 1]
         with np.errstate(invalid="ignore"):
-            dom = np.nanargmax(np.where(np.isfinite(mineral), mineral, -1), axis=1)
-        dominant = np.where(np.isfinite(rmse) & (rmse <= s.lsma_max_rmse), np.asarray(em_mats)[dom] + 1, 0)
+            dom = np.nanargmax(np.where(np.isfinite(non_shade), non_shade, -1), axis=1)
+        mineral_dom = dom < len(em_mats)  # the background winning means "no distinct mineral"
+        ok = np.isfinite(rmse) & (rmse <= s.lsma_max_rmse) & mineral_dom
+        dominant = np.where(ok, np.asarray(em_mats)[np.minimum(dom, len(em_mats) - 1)] + 1, 0)
 
     cem_score = np.full((n_mat, pix.shape[0]), np.nan, np.float32)
     cem_detect = np.zeros((n_mat, pix.shape[0]), bool)

@@ -113,7 +113,11 @@ materials:
         left: [690, 760]
         right: [1290, 1450]
         max_depth: 0.03
-    min_fit: 0.85
+        # Mature lunar soil has shallow bands everywhere, so an absolute limit alone let
+        # weakly pyroxene-bearing pixels through (real M3 test, 2026-09). Mg-spinel has
+        # essentially no 1 um band (Pieters et al., 2011): require it to be < 25 % of the 2 um band.
+        max_ratio: 0.25
+    min_fit: 0.90
     min_depth: 0.03
     min_snr: 3
 
