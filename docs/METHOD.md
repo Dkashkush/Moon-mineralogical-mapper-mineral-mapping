@@ -14,8 +14,9 @@ al., 2013), 85 bands from 461 to 2976 nm. Data type, fill value (`data ignore va
   also excluded by default, because residual thermal emission remains after the L2 thermal
   correction (Clark et al., 2011; Li & Milliken, 2016). The default range is 540–2500 nm
   (71 bands).
-* **Coordinates.** The LOC file band order is longitude, latitude, radius (M3 Archive SIS).
-  Bands are selected by their header `band names`, with that order as the fallback.
+* **Coordinates.** The LOC file band order is longitude, latitude, radius (M3 Archive SIS),
+  stored as float64 (unlike RFL and OBS, which are float32). Bands are selected by their
+  header `band names`, with the SIS order as the fallback.
 * **Geometry.** The OBS file's to-sun zenith is the incidence angle. Pixels with incidence
   above 85° are masked by default (`--max-incidence`). L2 reflectance is already
   photometrically normalised to i = 30°, e = 0°, g = 30°, so no further photometric
@@ -25,11 +26,18 @@ al., 2013), 85 bands from 461 to 2976 nm. Data type, fill value (`data ignore va
 
 Laboratory spectra are resampled to the scene's own band centres λᵢ:
 
-R̂(λᵢ) = Σⱼ gᵢ(λⱼ) R(λⱼ) Δλⱼ / Σⱼ gᵢ(λⱼ) Δλⱼ,  with gᵢ(λ) = exp[−(λ − λᵢ)² / 2σᵢ²] and σᵢ = FWHMᵢ / 2√(2 ln 2).
+R̂(λᵢ) = Σⱼ gᵢ(λⱼ) R(λⱼ) Δλⱼ / Σⱼ gᵢ(λⱼ) Δλⱼ,  with gᵢ(λ) = Σₖ exp[−(λ − λₖ)² / 2σₖ²] over the native channels k of band i, and σₖ = FWHMₖ / 2√(2 ln 2).
 
-* **FWHM.** Taken from the header when present. Otherwise it is set to the local band
-  spacing (20 nm below 1549 nm, 40 nm above), which reproduces global-mode 2×/4× binning
-  (Green et al., 2011).
+* **Band response.** Global-mode bands are averages of 2 or 4 native target-mode channels
+  (Green et al., 2011). The L2 header lists every native channel's centre and FWHM
+  (`target wavelengths`, `target fwhm`, ≈12.2–12.8 nm) and the global band it belongs to
+  (`global channel number`). When those fields are present, each band's response is the
+  sum of its channels' Gaussians. This is the exact, flat-topped response, not a single wide
+  Gaussian. For scene m3g20090607t025544_v01 the member-channel centres reproduce the
+  global band centres to within 0.005 nm. If the table is missing, a single Gaussian with
+  FWHM equal to the local band spacing (20 or 40 nm) is used instead. On synthetic features
+  the two differ by < 0.1 % of the continuum for broad (σ = 150 nm) bands and by up to ≈1 %
+  for narrow (σ = 15–30 nm) bands.
 * **Coverage.** A band is left empty unless ≥ 95 % of its response-function weight falls on
   valid lab samples. Spectra must cover ≥ 90 % of the analysis range to be kept.
 * **Consistency check.** The library is always built from the scene header. Identification

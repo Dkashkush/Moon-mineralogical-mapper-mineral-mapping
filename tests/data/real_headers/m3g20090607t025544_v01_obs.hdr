@@ -1,0 +1,21 @@
+ENVI
+description = {
+  M3 Level 1B Observation Parameters [Tue Nov 09 17:00:18 2010] (scene mean
+  To-Sun Path Length subtracted from Band 6 (au) :1.017498552871 [Tue Nov 09
+  17:00:18 2010] IAU au defined as 149597870691 meters [Tue Nov 09 17:00:18
+  2010]}
+samples = 304
+lines   = 17868
+bands   = 10
+header offset = 0
+file type = ENVI Standard
+data type = 4
+interleave = bil
+sensor type = Unknown
+byte order = 0
+wavelength units = Unknown
+band names = {
+ To-Sun Azimuth (deg), To-Sun Zenith (deg), To-M3 Azimuth (deg), 
+ To-M3 Zenith (deg), Phase (deg), To-Sun Path Length (au-1.017498552871), 
+ To-M3 Path Length (m), Facet Slope (deg), Facet Aspect (deg), 
+ Facet Cos(i) (unitless)}

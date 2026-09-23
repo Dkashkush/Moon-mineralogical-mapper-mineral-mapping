@@ -52,9 +52,22 @@ def main(argv: list[str] | None = None) -> None:
     m.add_argument("--no-figures", action="store_true")
     m.add_argument("--out", required=True)
 
+    s = sub.add_parser("subset", help="copy a window of a scene (all three cubes) to a new folder")
+    s.add_argument("--folder", required=True)
+    s.add_argument("--scene", required=True)
+    s.add_argument("--rows", required=True, help="e.g. 3000:3150")
+    s.add_argument("--cols", help="e.g. 0:304 (default: all)")
+    s.add_argument("--out", required=True)
+
     args = parser.parse_args(argv)
     from . import pipeline
 
+    if args.command == "subset":
+        from .m3 import M3Scene, subset_scene
+
+        scene = M3Scene.from_folder(args.folder, args.scene)
+        print(subset_scene(scene, args.out, _slice(args.rows), _slice(args.cols)))
+        return
     if args.command == "build-library":
         pipeline.build_scene_library(args.scene_header, args.out, usgs=args.usgs,
                                      relab=args.relab, extra=args.extra)

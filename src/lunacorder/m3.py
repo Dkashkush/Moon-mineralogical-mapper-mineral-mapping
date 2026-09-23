@@ -23,7 +23,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .envi import EnviImage
+from .envi import EnviImage, write_subset
 
 # Default spectral range used for identification. Bands 1-2 are flagged bad in
 # the L2 bbl, and beyond ~2.5 um residual thermal emission remains in L2 data
@@ -71,6 +71,33 @@ def fwhm_from_spacing(wavelengths: np.ndarray) -> np.ndarray:
     right = np.concatenate([gaps, [gaps[-1]]])
     # Use the smaller neighbour gap at transitions between binning regimes
     return np.minimum(left, right)
+
+
+def global_band_members(header: dict):
+    """Native channels summed into each global-mode band, from an M3 L2 header.
+
+    L2 reflectance headers list every target-mode channel (``target
+    wavelengths``, ``target fwhm``, ~12.3 nm) and the global band it was binned
+    into (``global channel number``, 2-86 for bands 1-85). Returns a list of
+    (centres, fwhms) per band, or None if the header lacks these fields.
+    """
+    tw = header.get("target wavelengths")
+    tf = header.get("target fwhm")
+    gc = header.get("global channel number")
+    n_bands = int(header.get("bands", 0))
+    if tw is None or tf is None or gc is None or not isinstance(gc, np.ndarray):
+        return None
+    tw, tf, gc = np.asarray(tw, float), np.asarray(tf, float), np.asarray(gc).astype(int)
+    if not (len(tw) == len(tf) == len(gc)):
+        return None
+    first = gc.min()
+    members = []
+    for band in range(n_bands):
+        sel = gc == first + band
+        if not sel.any():
+            return None
+        members.append((tw[sel], tf[sel]))
+    return members
 
 
 def _band_index(names: list[str], keywords: list[str], fallback: int) -> int:
@@ -133,6 +160,15 @@ class M3Scene:
             return fw * 1000.0 if fw.max() < 1 else fw
         return fwhm_from_spacing(self.wavelengths)
 
+    @property
+    def band_members(self):
+        """Exact composite response of each band (see :func:`global_band_members`), or None."""
+        members = global_band_members(self.rfl.header)
+        if members is None:
+            return None
+        scale = 1000.0 if max(c.max() for c, _ in members) < 100 else 1.0
+        return [(c * scale, f * scale) for c, f in members]
+
     def good_bands(self, wl_range: tuple[float, float] = DEFAULT_RANGE_NM) -> np.ndarray:
         """Boolean mask of bands inside ``wl_range`` and not flagged in the header bbl."""
         wl = self.wavelengths
@@ -182,3 +218,18 @@ class M3Scene:
                 break
         block = self.obs.read(rows, cols, mask_nodata=False)
         return {k: block[:, :, i] for k, i in idx.items()}
+
+
+def subset_scene(scene: M3Scene, outdir: str | os.PathLike, rows: slice, cols: slice = slice(None)) -> Path:
+    """Write a small, self-contained copy of part of a scene (rfl, loc, obs + headers).
+
+    Handy for sharing a test area, or for working on a laptop: 150 full-width
+    lines of an M3 global-mode scene are ~18 MB instead of ~2.2 GB.
+    """
+    outdir = Path(outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+    for kind in ("rfl", "loc", "obs"):
+        image = getattr(scene, kind)
+        if image is not None:
+            write_subset(image, outdir / f"{scene.scene_id}_{kind}.img", rows, cols)
+    return outdir

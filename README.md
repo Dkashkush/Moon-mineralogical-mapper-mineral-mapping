@@ -52,6 +52,9 @@ lunacorder build-library \
     --usgs ASCIIdata_splib07a.zip --relab Relab_lunar_mineral_spectra.zip \
     --out m3_library.npz
 
+# (optional) cut a small, shareable test area: ~18 MB for 150 lines
+lunacorder subset --folder M3_Project --scene m3g20090607t025544_v01 --rows 3000:3150 --out test_area/
+
 # 2. Map a window of the scene (rows are along-track lines)
 lunacorder map --folder M3_Project --scene m3g20090607t025544_v01 \
     --library m3_library.npz --rows 3000:4500 --out results/
@@ -70,8 +73,9 @@ To run on Google Colab, open [`notebooks/lunacorder_colab.ipynb`](notebooks/luna
 
 1. **Read** the scene through memory maps. Data type, fill value, interleave, wavelengths,
    bad-band list and LOC/OBS band order all come from the headers, never from assumptions.
-2. **Convolve** every lab spectrum to the scene's band centres with Gaussian response
-   functions. FWHM is taken from the header, or from band spacing (20/40 nm in global mode).
+2. **Convolve** every lab spectrum to the scene's bands using the exact global-mode
+   response. The L2 header records which native ~12 nm channels were summed into each
+   band, and the code uses that record.
 3. **Identify.** For each material's diagnostic features:
    * remove a local continuum,
    * fit the reference feature by least squares,
@@ -91,7 +95,9 @@ identified by feature fitting.
 
 ## Validation
 
-Every test runs in CI (`pytest`). On a synthetic M3-format scene (85 global-mode bands, BIL
+Every test runs in CI (`pytest`). Header parsing, data types, band naming and the
+channel-binning table are checked against the **real PDS headers** of scene
+`m3g20090607t025544_v01` (`tests/data/real_headers`). On a synthetic M3-format scene (85 global-mode bands, BIL
 float32, −999 fill, PDS header quirks) built from known absorption bands:
 
 | Gaussian noise (σ, reflectance ≈ 0.12–0.22) | Olivine | LCP | HCP | Plagioclase | Mg-spinel | False positives (featureless) |

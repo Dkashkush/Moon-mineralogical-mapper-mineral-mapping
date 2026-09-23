@@ -229,3 +229,27 @@ def write_envi(path: str | os.PathLike, data: np.ndarray, band_names=None,
         lines.append(f"{key} = {value}")
     path.with_suffix(".hdr").write_text("\n".join(lines) + "\n")
     return path
+
+
+def write_subset(image: EnviImage, out_image: str | os.PathLike, rows: slice, cols: slice) -> Path:
+    """Copy a (rows, cols) window of an ENVI image, keeping its data type, interleave
+    and every header field (only ``lines`` and ``samples`` change)."""
+    out_image = Path(out_image)
+    mm = image.memmap()
+    if image.interleave == "bsq":
+        block = mm[:, rows, cols]
+        n_lines, n_samples = block.shape[1], block.shape[2]
+    elif image.interleave == "bil":
+        block = mm[rows, :, cols]
+        n_lines, n_samples = block.shape[0], block.shape[2]
+    else:
+        block = mm[rows, cols, :]
+        n_lines, n_samples = block.shape[0], block.shape[1]
+    np.ascontiguousarray(block).tofile(out_image)
+    text = find_header(image.path).read_text(errors="replace") if image.path.exists() else ""
+    text = re.sub(r"(?im)^(\s*lines\s*=\s*)\d+", rf"\g<1>{n_lines}", text)
+    text = re.sub(r"(?im)^(\s*samples\s*=\s*)\d+", rf"\g<1>{n_samples}", text)
+    text = re.sub(r"(?im)^(\s*header offset\s*=\s*)\d+", r"\g<1>0", text)
+    header = out_image.with_suffix(".hdr")
+    header.write_text(text)
+    return header

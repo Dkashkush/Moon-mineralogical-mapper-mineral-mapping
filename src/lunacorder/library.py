@@ -121,27 +121,47 @@ class SpectralLibrary:
 # Convolution
 # ---------------------------------------------------------------------------
 
-def gaussian_srf_matrix(src_wl: np.ndarray, band_centres: np.ndarray, fwhm: np.ndarray) -> np.ndarray:
-    """Weights W (bands, n_src) so that ``W @ spectrum`` integrates each Gaussian SRF.
+BandMembers = list[tuple[np.ndarray, np.ndarray]]
+"""Per sensor band: (centres, FWHMs) of the native channels summed to make it."""
+
+_FWHM_TO_SIGMA = 1.0 / (2.0 * np.sqrt(2.0 * np.log(2.0)))
+
+
+def srf_matrix(src_wl: np.ndarray, band_centres: np.ndarray, fwhm: np.ndarray,
+               members: BandMembers | None = None) -> tuple[np.ndarray, np.ndarray]:
+    """Spectral response weights W (bands, n_src) and each band's full-coverage weight.
+
+    Each band is a Gaussian (``band_centres``, ``fwhm``) or, if ``members`` is
+    given, the sum of its native channels' Gaussians. M3 global-mode bands are
+    averages of 2 or 4 target-mode channels, recorded in the L2 header, so
+    ``members`` reproduces their true, flat-topped response.
 
     Weights include the source sample widths (trapezoid rule), so non-uniform
-    lab sampling is handled correctly. Rows are *not* normalised here because
-    normalisation must account for missing source samples; see :func:`convolve`.
+    lab sampling is handled. Rows are not normalised here, because the
+    normalisation must account for missing source samples (see :func:`convolve`).
     """
     src_wl = np.asarray(src_wl, dtype=float)
-    sigma = np.asarray(fwhm, dtype=float) / (2.0 * np.sqrt(2.0 * np.log(2.0)))
-    widths = np.gradient(src_wl) if len(src_wl) > 1 else np.ones(1)
-    z = (src_wl[None, :] - np.asarray(band_centres, float)[:, None]) / sigma[:, None]
-    return np.exp(-0.5 * z**2) * np.abs(widths)[None, :]
+    widths = np.abs(np.gradient(src_wl)) if len(src_wl) > 1 else np.ones(1)
+    if members is None:
+        members = [(np.array([c]), np.array([f])) for c, f in zip(np.asarray(band_centres, float),
+                                                                   np.asarray(fwhm, float))]
+    weights = np.zeros((len(members), len(src_wl)))
+    full = np.zeros(len(members))
+    for i, (centres, fwhms) in enumerate(members):
+        sigma = np.asarray(fwhms, float) * _FWHM_TO_SIGMA
+        z = (src_wl[None, :] - np.asarray(centres, float)[:, None]) / sigma[:, None]
+        weights[i] = np.exp(-0.5 * z**2).sum(axis=0) * widths
+        full[i] = np.sum(sigma) * np.sqrt(2.0 * np.pi)
+    return weights, full
 
 
 def convolve(spectrum: Spectrum, band_centres: np.ndarray, fwhm: np.ndarray,
-             min_coverage: float = 0.95) -> np.ndarray:
+             min_coverage: float = 0.95, members: BandMembers | None = None) -> np.ndarray:
     """Resample a lab spectrum to sensor bands.
 
-    A band is set to NaN unless at least ``min_coverage`` of its SRF weight
-    falls on valid source samples, so bands beyond the lab spectrometer's range
-    are left empty rather than extrapolated.
+    A band is set to NaN unless at least ``min_coverage`` of its response
+    weight falls on valid source samples, so bands beyond the lab
+    spectrometer's range are left empty rather than extrapolated.
     """
     wl = np.asarray(spectrum.wavelengths, float)
     refl = np.asarray(spectrum.reflectance, float)
@@ -152,11 +172,8 @@ def convolve(spectrum: Spectrum, band_centres: np.ndarray, fwhm: np.ndarray,
     if len(wl) < 2:
         return np.full(len(band_centres), np.nan)
 
-    weights = gaussian_srf_matrix(wl, band_centres, fwhm)
+    weights, full = srf_matrix(wl, band_centres, fwhm, members)
     total = weights.sum(axis=1)
-    # Expected total weight of a fully sampled Gaussian: integral = sigma*sqrt(2*pi)
-    sigma = np.asarray(fwhm, float) / (2.0 * np.sqrt(2.0 * np.log(2.0)))
-    full = sigma * np.sqrt(2.0 * np.pi)
     with np.errstate(invalid="ignore", divide="ignore"):
         out = (weights @ refl) / total
     out[~(total / full >= min_coverage)] = np.nan
@@ -165,13 +182,15 @@ def convolve(spectrum: Spectrum, band_centres: np.ndarray, fwhm: np.ndarray,
 
 def build_library(spectra: list[Spectrum], band_centres: np.ndarray, fwhm: np.ndarray,
                   min_valid_fraction: float = 0.9,
-                  required_range: tuple[float, float] | None = None) -> SpectralLibrary:
+                  required_range: tuple[float, float] | None = None,
+                  members: BandMembers | None = None) -> SpectralLibrary:
     """Convolve spectra to the sensor, dropping any that cover too little of it.
 
     ``min_valid_fraction`` is evaluated over the bands inside ``required_range``
     (nm), or over all bands if no range is given. For lunar work pass the
     identification range, e.g. (540, 2500), so ASD spectra that stop at
-    2.5 um are not rejected for missing M3's thermal bands.
+    2.5 um are not rejected for missing M3's thermal bands. ``members`` gives
+    the exact composite response of binned bands (see :func:`srf_matrix`).
     """
     band_centres = np.asarray(band_centres, float)
     in_range = np.ones(len(band_centres), bool)
@@ -179,7 +198,7 @@ def build_library(spectra: list[Spectrum], band_centres: np.ndarray, fwhm: np.nd
         in_range = (band_centres >= required_range[0]) & (band_centres <= required_range[1])
     names, rows, sources = [], [], []
     for sp in spectra:
-        resampled = convolve(sp, band_centres, fwhm)
+        resampled = convolve(sp, band_centres, fwhm, members=members)
         if np.isfinite(resampled[in_range]).mean() >= min_valid_fraction:
             names.append(sp.name)
             rows.append(resampled)

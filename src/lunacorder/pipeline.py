@@ -13,7 +13,7 @@ from .envi import EnviImage
 from .expert import ExpertSystem
 from .identify import identify, resolve
 from .library import SpectralLibrary, build_library, read_relab_folder, read_two_column, read_usgs_splib07
-from .m3 import DEFAULT_RANGE_NM, M3Scene, fwhm_from_spacing
+from .m3 import DEFAULT_RANGE_NM, M3Scene, fwhm_from_spacing, global_band_members
 from .parameters import band_parameters
 from . import products
 
@@ -36,6 +36,11 @@ def build_scene_library(scene_header: str | Path, out: str | Path, usgs: str | P
     if wl.max() < 100:
         wl = wl * 1000.0
     fwhm = img.fwhm if img.fwhm is not None and len(img.fwhm) == len(wl) else fwhm_from_spacing(wl)
+    members = global_band_members(img.header)
+    if members is not None:
+        print(f"Using exact band responses from the header ({sum(len(c) for c, _ in members)} native channels)")
+    else:
+        print("Header has no channel-binning table; using Gaussian responses from band FWHM")
 
     spectra = []
     if usgs:
@@ -46,7 +51,7 @@ def build_scene_library(scene_header: str | Path, out: str | Path, usgs: str | P
         spectra.append(read_two_column(path))
     if not spectra:
         raise ValueError("No reference spectra were read; check the library paths")
-    lib = build_library(spectra, wl, fwhm, required_range=required_range)
+    lib = build_library(spectra, wl, fwhm, required_range=required_range, members=members)
     lib.save(out)
     lib.to_envi_sli(Path(out).with_suffix(".sli"))
     print(f"Read {len(spectra)} spectra; kept {len(lib)} with coverage of {required_range} nm")

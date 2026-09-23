@@ -124,3 +124,17 @@ def test_library_roundtrip(tmp_path):
     np.testing.assert_array_equal(back.spectra, lib.spectra)
     lib.to_envi_sli(tmp_path / "lib.sli")
     assert (tmp_path / "lib.hdr").exists()
+
+
+def test_subset_scene_roundtrip(tmp_path):
+    from lunacorder.m3 import subset_scene
+
+    write_scene(tmp_path / "full")
+    scene = M3Scene.from_folder(tmp_path / "full", "m3g20090607t025544_v01")
+    subset_scene(scene, tmp_path / "sub", slice(10, 25), slice(5, 30))
+    sub = M3Scene.from_folder(tmp_path / "sub", "m3g20090607t025544_v01")
+    assert (sub.rfl.lines, sub.rfl.samples) == (15, 25)
+    np.testing.assert_array_equal(sub.read_reflectance(), scene.read_reflectance(slice(10, 25), slice(5, 30)))
+    np.testing.assert_array_equal(sub.read_lonlat()[1], scene.read_lonlat(slice(10, 25), slice(5, 30))[1])
+    np.testing.assert_allclose(sub.wavelengths, scene.wavelengths)
+    assert sub.obs is not None
