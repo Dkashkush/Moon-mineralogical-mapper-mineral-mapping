@@ -126,6 +126,13 @@ float32, −999 fill, PDS header quirks) built from known absorption bands:
 Weak bands such as plagioclase's 1.25 µm feature drop out first as noise increases. This is
 the expected behaviour: the tool reports nothing rather than guessing.
 
+Validation against ground truth: `lunacorder validate --site apollo17 ...` maps the area
+around an Apollo landing site. It reports (1) detections near the site against the returned
+samples' mineralogy, (2) the false-alarm rate on featureless versions of the real pixels,
+and (3) how the detected fraction changes with the thresholds. On the first real test area
+(m3g20090607t025544_v01, lines 3000–3149), 20,000 featureless nulls gave 0.00 % false alarms
+for every material.
+
 Planned validation on real data:
 * compare with published M3 detections, e.g. Mg-spinel at Moscoviensis (Pieters et al.,
   2011), olivine around Copernicus and Aristarchus, and PAN in the Orientale rings;

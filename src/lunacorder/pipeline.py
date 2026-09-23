@@ -202,3 +202,64 @@ def _plot_parameters(params: dict, path: Path):
     fig.tight_layout()
     fig.savefig(path, dpi=200, bbox_inches="tight")
     plt.close(fig)
+
+
+def validate_site(folder: str | Path, scene_id: str, library: str | Path | SpectralLibrary, site: str,
+                  outdir: str | Path, half_lines: int = 60, radius_km: float = 3.0, **map_kwargs) -> dict:
+    """Map the area around a ground-truth site and write a validation report.
+
+    The report combines: detections near the site vs. what the returned samples say
+    should and should not be there; the false-alarm rate on featureless nulls; and
+    a threshold sweep for every material, so reviewers can see how robust the map is.
+    """
+    from .sites import APOLLO
+    from .validate import false_alarm_rate, site_summary, site_window, threshold_sweep
+
+    outdir = Path(outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+    target = APOLLO[site]
+    scene = M3Scene.from_folder(folder, scene_id)
+    rows, where = site_window(scene, target, half_lines)
+    print(f"{target.name}: row {where['row']}, col {where['col']} "
+          f"({where['distance_km']:.2f} km from the LM, pixel {where['pixel_km']:.2f} km)")
+    result, extras = map_scene(folder, scene_id, library, outdir, rows=rows, **map_kwargs)
+    resolved, good = extras["resolved"], scene.good_bands(extras["resolved"].expert.wavelength_range_nm)
+
+    report = {
+        "site": where,
+        "rows": [rows.start, rows.stop],
+        "near_site": site_summary(result, extras["lon"], extras["lat"], target, radius_km),
+        "false_alarm_rate": false_alarm_rate(extras["cube"], resolved, good),
+        "threshold_sweep": {m: threshold_sweep(result, m) for m in result.material_names
+                            if resolved.references_for(result.material_names.index(m))},
+        "sample_notes": target.notes,
+    }
+    (outdir / f"{scene_id}_{site}_validation.json").write_text(json.dumps(report, indent=2))
+    (outdir / f"{scene_id}_{site}_validation.md").write_text(_validation_markdown(report, target))
+    print((outdir / f"{scene_id}_{site}_validation.md").read_text())
+    return report
+
+
+def _validation_markdown(report: dict, site) -> str:
+    near = report["near_site"]
+    lines = [f"# Validation at {site.name} ({site.setting})", "",
+             f"Closest pixel {report['site']['distance_km']:.2f} km from the LM; "
+             f"{near['pixels']} pixels within {near['radius_km']} km.", "",
+             "## Against the returned samples", "", "| Material | Expected | Detected within radius | Result |",
+             "|---|---|---|---|"]
+    for c in near["checks"]:
+        lines.append(f"| {c['material']} | {c['expected']} | {c['percent']:.1f} % | "
+                     f"{'PASS' if c['pass'] else 'FAIL'} |")
+    lines += ["", f"Sample notes: {site.notes}", "", "## False-alarm rate (featureless nulls)", "",
+              "| Material | False alarms |", "|---|---|"]
+    lines += [f"| {m} | {100 * v:.2f} % |" for m, v in report["false_alarm_rate"].items()]
+    lines += ["", "## Threshold sensitivity (percent of valid pixels detected)", ""]
+    for m, rows in report["threshold_sweep"].items():
+        fits = sorted({r["min_fit"] for r in rows})
+        lines += [f"**{m}**", "", "| min depth \\ min fit | " + " | ".join(f"{f:.2f}" for f in fits) + " |",
+                  "|---" * (len(fits) + 1) + "|"]
+        for d in sorted({r["min_depth"] for r in rows}):
+            vals = [next(r["percent"] for r in rows if r["min_depth"] == d and r["min_fit"] == f) for f in fits]
+            lines.append(f"| {d:.2f} | " + " | ".join(f"{v:.1f}" for v in vals) + " |")
+        lines.append("")
+    return "\n".join(lines)

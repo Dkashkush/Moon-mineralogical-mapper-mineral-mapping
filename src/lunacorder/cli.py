@@ -58,6 +58,16 @@ def main(argv: list[str] | None = None) -> None:
     m.add_argument("--no-figures", action="store_true")
     m.add_argument("--out", required=True)
 
+    v = sub.add_parser("validate", help="map around an Apollo landing site and write a validation report")
+    v.add_argument("--folder", required=True)
+    v.add_argument("--scene", required=True)
+    v.add_argument("--library", required=True)
+    v.add_argument("--site", required=True, choices=["apollo11", "apollo12", "apollo14", "apollo15",
+                                                     "apollo16", "apollo17"])
+    v.add_argument("--half-lines", type=int, default=60)
+    v.add_argument("--radius-km", type=float, default=3.0)
+    v.add_argument("--out", required=True)
+
     s = sub.add_parser("subset", help="copy a window of a scene (all three cubes) to a new folder")
     s.add_argument("--folder", required=True)
     s.add_argument("--scene", required=True)
@@ -68,6 +78,10 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     from . import pipeline
 
+    if args.command == "validate":
+        pipeline.validate_site(args.folder, args.scene, args.library, args.site, args.out,
+                               half_lines=args.half_lines, radius_km=args.radius_km)
+        return
     if args.command == "subset":
         from .m3 import M3Scene, subset_scene
 
