@@ -117,7 +117,7 @@ def sam_sid(pixels: np.ndarray, library: np.ndarray, sam_max_rad: float = 0.10, 
         log_p = np.log(pp)
         d_pq = (pp * log_p).sum(axis=1, keepdims=True) - pp @ log_q.T
         d_qp = h_q[None, :] - log_p @ q.T
-        sid = d_pq + d_qp
+        sid = np.maximum(d_pq + d_qp, 0.0)  # >= 0 by definition; clamp rounding noise
         bsid = sid.argmin(axis=1)
         v = sid[np.arange(len(bsid)), bsid]
 

@@ -33,7 +33,8 @@ def test_sam_sid_chunking_is_exact(lib):
     a = classic.sam_sid(pix, ref, chunk=3)
     b = classic.sam_sid(pix, ref, chunk=10_000)
     np.testing.assert_array_equal(a.sam_index, b.sam_index)
-    np.testing.assert_allclose(a.sid_value, b.sid_value, rtol=1e-6)
+    np.testing.assert_allclose(a.sid_value, b.sid_value, rtol=1e-6, atol=1e-9)
+    assert (a.sid_value >= 0).all()
 
 
 def test_lsma_recovers_known_mixture(lib):
