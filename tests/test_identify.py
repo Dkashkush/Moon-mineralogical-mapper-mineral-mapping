@@ -107,6 +107,31 @@ def test_end_to_end_scene(tmp_path, library):
     meta = json.loads((out / "m3g20090607t025544_v01_run.json").read_text())
     assert meta["detections"]["Olivine"] > 0
 
+    # Masked pixels are NODATA, not "analysed, nothing found" (class 0)
+    from lunacorder.envi import EnviImage
+    from lunacorder.products import NODATA
+
+    groups = EnviImage.open(out / "m3g20090607t025544_v01_groups.img").read(mask_nodata=False)
+    assert np.all(groups[~valid][:, 0] == NODATA)
+    assert np.all(groups[valid][:, 0] != NODATA)
+
+    # SAM+SID on band-depth spectra: featureless pixels get no match, absorbing pixels do
+    samsid = extras["ensemble"].samsid_material
+    assert (samsid[(truth == 0) & valid] == 0).mean() > 0.95
+    assert (samsid[(truth == 2) & valid] == 2).mean() > 0.8  # enstatite -> Low-Ca pyroxene (index 1 + 1)
+
+
+def test_reference_without_a_clear_band_is_not_used():
+    from lunacorder.library import Spectrum
+
+    lab = np.arange(350.0, 2600.0, 1.0)
+    weak = Spectrum("Anorthite_WEAK", lab, absorbed(lab, [(1250, 150, 0.004)]), "synthetic")
+    lib = build_library([*lab_spectra(), weak], WL, fwhm_from_spacing(WL), required_range=(540, 2500))
+    with pytest.warns(UserWarning):
+        res = resolve(ExpertSystem.builtin(), lib, WL, GOOD)
+    plag = [m.name for m in res.expert.materials].index("Plagioclase")
+    assert [r.name for r in res.references_for(plag)] == ["Anorthite_SYN4"]
+
 
 def test_geotiff_is_georeferenced(tmp_path, library):
     rasterio = pytest.importorskip("rasterio")

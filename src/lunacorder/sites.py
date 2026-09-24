@@ -5,6 +5,9 @@ Coordinates are the lunar module positions measured from LROC images (Wagner et 
 quoting them. Expected mineralogy is summarised qualitatively from the returned
 samples. It says what feature fitting *should* and *should not* find within a few km
 of the LM, which is how the tool's thresholds are validated (see ``validate.py``).
+
+Apollo 16 is a weak test: M3 L2 reflectance was calibrated against Apollo 16 soil 62231
+(ground-truth correction, Isaacson et al., 2013), so agreement there is partly built in.
 """
 
 from __future__ import annotations
@@ -38,7 +41,9 @@ APOLLO = {
                      notes="Pigeonite/augite mare basalts on the plain; noritic material on the Apennine front."),
     "apollo16": Site("Apollo 16", -8.9730, 15.5002, "Descartes highlands, feldspathic breccias",
                      expect=(), expect_absent=("High-Ca pyroxene", "Mg-spinel", "Olivine"),
-                     notes="Plagioclase-rich, mafic-poor. Mature soils are nearly featureless in the NIR."),
+                     notes="Plagioclase-rich, mafic-poor. Mature soils are nearly featureless in the NIR. "
+                           "NOT an independent test: the M3 L2 ground-truth correction was derived from "
+                           "Apollo 16 soil 62231 at this site (Isaacson et al., 2013)."),
     "apollo17": Site("Apollo 17", 20.1908, 30.7717, "Taurus-Littrow valley",
                      expect=("High-Ca pyroxene",), expect_absent=("Mg-spinel", "Plagioclase"),
                      notes="Valley floor: high-Ti basalt (augite, ilmenite) and dark mantle glass beads "

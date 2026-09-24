@@ -31,22 +31,37 @@ def _clean(a: np.ndarray) -> np.ndarray:
     return a
 
 
+def mask_invalid(stack: np.ndarray, valid: np.ndarray | None) -> np.ndarray:
+    """Set masked / no-data pixels to NaN (written as NODATA), so they are not mistaken for
+    "analysed, nothing detected" (class 0, fit x depth 0)."""
+    out = np.asarray(stack, dtype=np.float32).copy()
+    if valid is not None:
+        out[..., ~np.asarray(valid, bool)] = np.nan
+    return out
+
+
 def write_image_products(result: IdentificationResult, outdir: str | Path, prefix: str,
-                         params: dict[str, np.ndarray] | None = None) -> list[Path]:
-    """Write ENVI stacks in the scene's own (unprojected) image geometry."""
+                         params: dict[str, np.ndarray] | None = None,
+                         valid: np.ndarray | None = None) -> list[Path]:
+    """Write ENVI stacks in the scene's own (unprojected) image geometry.
+
+    Pixels outside ``valid`` (fill, masked geometry) are NODATA in every product.
+    """
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
     names = result.material_names
     written = []
     for kind, stack in [("fit_depth", result.fit_depth), ("fit", result.fit),
                         ("depth", result.depth), ("sigma", result.sigma)]:
-        written.append(write_envi(outdir / f"{prefix}_{kind}.img", _clean(np.moveaxis(stack, 0, -1)),
+        written.append(write_envi(outdir / f"{prefix}_{kind}.img",
+                                  _clean(np.moveaxis(mask_invalid(stack, valid), 0, -1)),
                                   band_names=names, nodata=NODATA))
     group_bands, group_names = [], []
     for gi, g in enumerate(result.group_names):
         group_bands += [result.group_class[gi].astype(np.float32), result.group_score[gi], result.group_margin[gi]]
         group_names += [f"{g} class", f"{g} fit x depth", f"{g} margin"]
-    written.append(write_envi(outdir / f"{prefix}_groups.img", _clean(np.dstack(group_bands)),
+    written.append(write_envi(outdir / f"{prefix}_groups.img",
+                              _clean(np.moveaxis(mask_invalid(np.stack(group_bands), valid), 0, -1)),
                               band_names=group_names, nodata=NODATA,
                               extra={"class names": "{none, " + ", ".join(names) + "}"}))
     if params:
@@ -160,8 +175,9 @@ def write_geotiff(path: str | Path, grid: np.ndarray, transform: tuple, band_nam
 
 def write_map_products(result: IdentificationResult, lon: np.ndarray, lat: np.ndarray,
                        outdir: str | Path, prefix: str, params: dict[str, np.ndarray] | None = None,
-                       resolution_m: float | None = None, consensus: np.ndarray | None = None) -> list[Path]:
-    """Map-project the key products to GeoTIFF."""
+                       resolution_m: float | None = None, consensus: np.ndarray | None = None,
+                       valid: np.ndarray | None = None) -> list[Path]:
+    """Map-project the key products to GeoTIFF (masked pixels become NODATA)."""
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
     stacks = {
@@ -179,7 +195,8 @@ def write_map_products(result: IdentificationResult, lon: np.ndarray, lat: np.nd
         stacks["consensus"] = (consensus.astype(np.float32), ["methods agreeing with feature fit (0-3)"])
     written = []
     for kind, (stack, names) in stacks.items():
-        grid, transform, *_ = grid_to_equirectangular(lon, lat, stack, resolution_m)
+        grid, transform, *_ = grid_to_equirectangular(lon, lat, mask_invalid(stack, valid), resolution_m)
+        grid[~np.isfinite(grid)] = NODATA
         written.append(write_geotiff(outdir / f"{prefix}_{kind}_map.tif", grid, transform, names))
     return written
 

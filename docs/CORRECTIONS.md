@@ -11,7 +11,7 @@ against the real PDS headers of scene `m3g20090607t025544_v01` (kept in
 
 | Earlier claim or code | What is true | Handling |
 |---|---|---|
-| L2 reflectance is int16, divide by 30000 (`step0_read_m3.py`, FINAL notebook text) | **Verified:** float32 (`data type = 4`) | data type read from header; ÷30000 only for integer data |
+| L2 reflectance is int16, divide by 30000 (`step0_read_m3.py`, FINAL notebook text) | **Verified:** float32 (`data type = 4`) | data type read from header; integer reflectance is refused rather than scaled by a guessed factor |
 | Fill value −32768 | **Verified:** `data ignore value = -999.0` | read from header |
 | LOC band 0 = latitude | **Verified:** `band names = {Longitude, Latitude, Radius}` | selected by band name |
 | LOC is float32 | **Verified:** float64 (`data type = 5`) | data type read from header |
@@ -41,7 +41,7 @@ against the real PDS headers of scene `m3g20090607t025544_v01` (kept in
 | "BD1900 = H₂O/OH" | lunar OH/H₂O is identified at ~2.8–3.0 µm (Pieters et al., 2009); 1.9 µm on the Moon is dominated by pyroxene | not produced |
 | "R730/R1580 separates olivine from pyroxene" | no support found for this ratio | not produced; IBD1000/IBD2000 and feature fitting are used |
 | Photometric masks: emission > 30°, phase > 90° | reasonable options, but with the wrong OBS indices they masked everything | available as `max_emission` / `max_phase` (off by default); incidence > 85° masked by default |
-| Savitzky–Golay (7 bands) before all analysis | on M3's 20/40 nm spacing, 7 bands spans 140–280 nm, which can flatten narrow features | applied only to SAM/SID input; feature fitting uses unsmoothed data |
+| Savitzky–Golay (7 bands) before all analysis | on M3's 20/40 nm spacing, 7 bands spans 140–280 nm, which can flatten narrow features | applied only to the SAM/SID/CEM input, identically to pixels and references; feature fitting uses unsmoothed data |
 
 ## Found on the first real-data run (lines 3000–3149 of m3g20090607t025544_v01)
 
@@ -51,6 +51,27 @@ against the real PDS headers of scene `m3g20090607t025544_v01` (kept in
 | Along-track detector stripes produced false band depths | IBD maps striped; 30 % vs 9 % LCP detections in edge vs other columns | cross-track destriping (METHOD §1) |
 | Weakly pyroxene-bearing soil labelled Mg-spinel | 84 pixels; their 1 µm band (0.013) was as deep as in LCP pixels | relative absent-band rule (`max_ratio` 0.25), spinel `min_fit` 0.90 |
 | An undetected material's first reference became an LSMA/CEM endmember | a featureless lab glass "explained" every pixel | endmembers only for detected materials, plus a scene-median background endmember |
+
+## Found in the full code and literature review (v0.1.2)
+
+Checked against the real test area (lines 3000–3149 of m3g20090607t025544_v01) where possible.
+
+| Problem | Evidence | Handling |
+|---|---|---|
+| SAM/SID thresholds never rejected anything | on continuum-removed spectra, all real pixels were ≤ 0.023 rad and SID ≤ 0.0002, far inside 0.10 / 0.04; featureless nulls matched *better* (0.002 rad) than real pixels | SAM/SID on band-depth spectra (1 − CR); limits 0.35 rad / 1.0; no null passes |
+| SAM/SID used only 14 % of the library | band 2497 nm is empty for 86 % of lab spectra (ASD stops at 2500 nm), and only complete rows were compared, so all ASD spectra were silently skipped | bands missing from > 5 % of the library are dropped for the whole-spectrum methods (1,742 of 1,843 spectra now usable) |
+| Pixels smoothed, library not | SAM/SID compared smoothed pixels with unsmoothed references (its own docstring requires identical processing); CEM got smoothed pixels but unsmoothed targets | identical smoothing and continuum removal for pixels, references and CEM targets |
+| SAM/SID matched lunar soils, not minerals | with RELAB soils in the library, mature-soil pixels matched "Standard lunar mix" etc., which confirms nothing about a mineral | SAM/SID compare with the materials' reference spectra only |
+| Masked pixels written as "nothing detected" | fill and high-incidence pixels had class 0 and fit × depth 0, indistinguishable from analysed pixels with no detection in the maps and GeoTIFFs | written as NODATA (−9999) |
+| Nearly band-free references used | e.g. Anorthite GDS28 (1.25 µm depth 0.25 %), Bytownite HS105.1B (0.19 %), Cr-diopside with a 0.28 % 2 µm band | references need each feature ≥ 2 % deep (`min_reference_depth`) |
+| RELAB 74001 used as a glass reference | 74001's black beads are the crystallised (olivine + ilmenite) equivalent of the 74220 orange glass | removed from the glass references |
+| ÷30000 fallback for integer reflectance | kept a scale factor this project had already shown to be wrong | integer reflectance is refused with an explanation |
+| Apollo 16 treated as independent ground truth | the L2 ground-truth correction was derived from Apollo 16 soil 62231 (Isaacson et al., 2013) | flagged in `sites.py` and METHOD §1 |
+| Methods paragraph omitted destriping | destriping (on by default) changes the data but was not reported | added to `*_methods.md` |
+| Cross-check labels GOOD/REVIEW/POOR | "POOR" suggested a wrong detection, but weak soil bands are simply hard to confirm by whole-spectrum methods | CONFIRMED / PARTLY / UNCONFIRMED |
+
+Unchanged on the real test area: 20.2 % low-Ca pyroxene detections, 0.00 % false alarms for
+every material on featureless nulls.
 
 ## References to re-check
 

@@ -38,7 +38,7 @@ For a scene `m3g20090607t025544_v01` the `map` command writes:
 | `*_ibd.png` | standard M3 IBD colour composite |
 | `*_samsid.img`, `*_lsma.img`, `*_cem.img` | SAM + SID matches, LSMA fractions + RMSE, CEM scores (independent cross-checks) |
 | `*_consensus.img` / `*_consensus_map.tif` | how many of SAM+SID, LSMA and CEM agree with feature fitting (0–3) |
-| `*_crosscheck.csv` | agreement between methods per mineral (GOOD / REVIEW / POOR) |
+| `*_crosscheck.csv` | agreement between methods per mineral (CONFIRMED / PARTLY / UNCONFIRMED) |
 | `*_mineral_map_projected.png` | publication map: lat/lon grid, scale bar, north arrow, legend |
 | `*_summary.csv`, `*_run.json` | detections per mineral; every setting, band and reference used |
 | `*_methods.md` | draft methods paragraph written from the settings actually used |

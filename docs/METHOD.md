@@ -21,6 +21,9 @@ al., 2013), 85 bands from 461 to 2976 nm. Data type, fill value (`data ignore va
   above 85° are masked by default (`--max-incidence`). L2 reflectance is already
   photometrically normalised to i = 30°, e = 0°, g = 30°, so no further photometric
   correction is applied.
+* **Calibration caveat.** L2 reflectance includes a ground-truth correction derived from
+  Apollo 16 soil 62231 at the Apollo 16 site (Isaacson et al., 2013). Agreement at Apollo 16
+  is therefore partly built in, so other sites (e.g. Apollo 17) are better validation targets.
 
 ### Cross-track destriping
 
@@ -53,7 +56,16 @@ R̂(λᵢ) = Σⱼ gᵢ(λⱼ) R(λⱼ) Δλⱼ / Σⱼ gᵢ(λⱼ) Δλⱼ,  wi
   the two differ by < 0.1 % of the continuum for broad (σ = 150 nm) bands and by up to ≈1 %
   for narrow (σ = 15–30 nm) bands.
 * **Coverage.** A band is left empty unless ≥ 95 % of its response-function weight falls on
-  valid lab samples. Spectra must cover ≥ 90 % of the analysis range to be kept.
+  valid lab samples. Spectra must cover ≥ 90 % of the analysis range to be kept. Most USGS
+  spectra were measured with an ASD spectrometer that stops at 2500 nm, while M3's last used
+  band (2497 nm, 40 nm wide) extends beyond it, so that band is empty for ~86 % of the library.
+  Feature fitting handles this per reference (continuum anchors use only the bands the
+  reference covers). The whole-spectrum methods (§5) drop any band missing from > 5 % of the
+  library.
+* **Reference quality.** A reference is used for a material only if each diagnostic feature
+  is at least `min_reference_depth` (default 0.02) deep in it. Several splib07a plagioclase
+  spectra (Fe-poor or very fine-grained) have 1.25 µm bands of 0.2–1 %. Such a band defines
+  no usable shape, and scaling it up to a pixel's depth mostly fits noise.
 * **Consistency check.** The library is always built from the scene header. Identification
   refuses to run if library and scene wavelengths differ by more than 2 nm.
 
@@ -117,19 +129,25 @@ the M3 IBD products (Mustard et al., 2011):
 Feature fitting is the primary identification. Three whole-spectrum methods from the
 project's earlier notebooks run alongside it as independent evidence (`ensemble=True`):
 
-* **SAM + SID.** Pixel and library spectra are continuum-removed with an upper convex hull
-  (Clark & Roush, 1984), after optional Savitzky–Golay smoothing of the pixels (7 bands,
-  order 2). Each pixel is compared with *every* library spectrum by spectral angle
-  (≤ 0.10 rad; Kruse et al., 1993) and spectral information divergence (≤ 0.04; Chang,
-  2000). A match counts only where both select the same spectrum, and the material that
-  spectrum belongs to is reported. Spectra are never averaged into endmembers, because
-  averaging continuum-removed spectra of different compositions smears band positions.
+* **SAM + SID.** Pixel and reference spectra are processed identically: Savitzky–Golay
+  smoothing (7 bands, order 2; Savitzky & Golay, 1964), then upper-convex-hull continuum
+  removal (Clark & Roush, 1984). They are then compared as **band-depth spectra**
+  (1 − continuum-removed) with every reference spectrum of the expert system's materials,
+  by spectral angle (≤ 0.35 rad; Kruse et al., 1993) and spectral information divergence
+  (≤ 1.0; Chang, 2000). A match counts only where both select the same spectrum, and the
+  material that spectrum belongs to is reported. Band-depth spectra are used because
+  continuum-removed spectra are all close to 1: on the first real test area, featureless
+  noise matched the library at 0.002 rad, *closer* than real pixels (0.007 rad), so no
+  threshold could reject anything. On band-depth spectra, featureless nulls score ≥ 0.45 rad
+  and none passed. Spectra are never averaged into endmembers, because averaging
+  continuum-removed spectra of different compositions smears band positions.
 * **LSMA.** Fully constrained (non-negative, sum-to-one) unmixing of *reflectance*, with a
   shade endmember (Adams et al., 1986). The endmembers are the reference spectra that feature
   fitting chose most often. Fits with RMSE > 0.02 are rejected. Linear mixing is not valid in
   continuum-removed space, and lunar regolith mixes intimately, so fractions are apparent
   areal fractions, not modal abundances.
-* **CEM** (Harsanyi, 1993) on continuum-removed band-depth spectra (CR − 1), so the score does
+* **CEM** (Harsanyi, 1993) on continuum-removed band-depth spectra (CR − 1, pre-processed like
+  SAM + SID for both pixels and targets), so the score does
   not depend on brightness. It uses a Tikhonov-regularised correlation matrix of the scene. A
   detection needs a score ≥ 0.5 **and** ≥ 3 robust standard deviations (1.4826 × MAD) above the
   scene median. A fixed "top 1 %" rule is not used, because it always flags 1 % of pixels even
@@ -138,7 +156,11 @@ project's earlier notebooks run alongside it as independent evidence (`ensemble=
 SAM, SID and LSMA always assign some library spectrum, even to featureless pixels; they have
 no "none" answer. They therefore cannot replace feature fitting. They only confirm it. For
 each pixel detected by feature fitting, the **consensus** product (0–3) counts how many of
-the three methods name the same material, and `*_crosscheck.csv` gives agreement per material.
+the three methods name the same material, and `*_crosscheck.csv` gives agreement per material
+(CONFIRMED ≥ 70 %, PARTLY ≥ 50 %, else UNCONFIRMED). Weak bands in mature soil are rarely
+confirmed by whole-spectrum methods. On the first real test area SAM + SID confirmed < 1 % of
+the low-Ca pyroxene pixels, but every match it made named low-Ca pyroxene. Treat agreement as
+strong evidence, and treat disagreement as "unconfirmed", not as evidence of an error.
 
 ## 6. Map projection
 
@@ -154,13 +176,26 @@ within one cell width. The CRS is the IAU Moon 2015 sphere (R = 1737.4 km).
   mafic content (PAN). The map shows where that band is present, not plagioclase abundance.
 * Opaque minerals (e.g. ilmenite) have no diagnostic absorptions in this range.
 * Space weathering weakens bands. Thresholds should be tuned per region and reported.
+* Residual thermal emission in warm (low-latitude, near-noon) scenes changes reflectance
+  near 2.5 µm, where every 2 µm feature has its right continuum (Li & Milliken, 2016). 2 µm
+  band depths are least reliable there.
+* Possible confusions to check with real spectra:
+  * HCP-rich mature soil with a very weak 2 µm band against olivine (both have broad 1 µm
+    bands). The olivine rule only limits the 2 µm band to an absolute 0.03.
+  * Olivine against plagioclase: olivine's composite band includes a 1.25 µm component. The
+    per-material maps can show both, and the group winner (usually olivine) decides.
+  * Mg-spinel references are matched by the name "spinel". Chromite, hercynite and magnetite
+    are excluded, but Cr-rich spinels are not.
 
 ## References
 
 _Volume and page numbers were compiled from memory. Check each one against the publisher's record before you cite it._
 
 * Adams, J. B. (1974). JGR 79, 4829–4836.
+* Adams, J. B., Smith, M. O. & Johnson, P. E. (1986). JGR 91, 8098–8112.
 * Besse, S. et al. (2013). Icarus 222, 229–242.
+* Burns, R. G. (1993). Mineralogical Applications of Crystal Field Theory, 2nd ed. Cambridge Univ. Press.
+* Chang, C.-I. (2000). IEEE Trans. Information Theory 46, 1927–1932.
 * Cheek, L. C. et al. (2013). JGR Planets 118, 1805–1820.
 * Clark, R. N. & Roush, T. L. (1984). JGR 89, 6329–6340.
 * Clark, R. N. et al. (1990). JGR 95, 12653–12680.
@@ -169,11 +204,19 @@ _Volume and page numbers were compiled from memory. Check each one against the p
 * Clark, R. N. et al. (2024). Planetary Science Journal 5, 276.
 * Cloutis, E. A. & Gaffey, M. J. (1991). JGR 96, 22809–22826.
 * Green, R. O. et al. (2011). JGR 116, E00G19.
+* Harsanyi, J. C. (1993). PhD thesis, University of Maryland Baltimore County.
+* Heinz, D. C. & Chang, C.-I. (2001). IEEE Trans. Geoscience and Remote Sensing 39, 529–545.
 * Horgan, B. H. N. et al. (2014). Icarus 234, 132–154.
+* Isaacson, P. J. et al. (2011). JGR 116, E00G11.
+* Isaacson, P. J. et al. (2013). JGR Planets 118, 369–381.
 * Klima, R. L. et al. (2011). JGR 116, E00G06.
+* Kruse, F. A. et al. (1993). Remote Sensing of Environment 44, 145–163.
 * Kokaly, R. F. et al. (2017). USGS Data Series 1035.
 * Li, S. & Milliken, R. E. (2016). JGR Planets 121, 2081–2107.
 * Mustard, J. F. et al. (2011). JGR 116, E00G12.
 * Ohtake, M. et al. (2009). Nature 461, 236–240.
+* Pieters, C. M. et al. (2009). Science 326, 568–572.
 * Pieters, C. M. et al. (2011). JGR 116, E00G08.
+* Savitzky, A. & Golay, M. J. E. (1964). Analytical Chemistry 36, 1627–1639.
 * Sunshine, J. M. & Pieters, C. M. (1998). JGR 103, 13675–13688.
+* Wagner, R. V. et al. (2017). Icarus 283, 92–103.

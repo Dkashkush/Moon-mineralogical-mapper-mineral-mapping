@@ -22,7 +22,13 @@ def methods_paragraph(meta: dict, expert: ExpertSystem, library: SpectralLibrary
         f"{meta['scene']} (rows {meta['rows'][0]}–{meta['rows'][1]}). {len(bands)} bands between "
         f"{bands[0]:.0f} and {bands[-1]:.0f} nm were used; bands flagged in the product's bad-band list and "
         f"bands longward of 2500 nm, which retain residual thermal emission, were excluded."
-        + (f" Pixels with {', '.join(masks)} were masked." if masks else ""),
+        + (f" Pixels with {', '.join(masks)} were masked." if masks else "")
+        + (" Along-track detector stripes were removed by dividing each image column by per-band gains "
+           "(the column's median spectral shape, each pixel normalised by its mean reflectance, relative "
+           "to the median over all columns), estimated from "
+           + ("about 1,000 lines spread over the whole strip." if meta.get("destripe") == "strip"
+              else "the mapped window.")
+           if meta.get("destripe") else ""),
         "",
         f"Reference spectra ({', '.join(sources) or 'laboratory libraries'}) were convolved to each M3 band "
         "using the band's spectral response, reconstructed as the sum of the Gaussian responses of the native "
@@ -43,7 +49,8 @@ def methods_paragraph(meta: dict, expert: ExpertSystem, library: SpectralLibrary
                   if s.get("smooth_window") else "")
         text += [
             "",
-            "As independent checks, continuum-removed spectra" + smooth + " were compared with every library "
+            "As independent checks, band-depth spectra (1 − continuum-removed reflectance)" + smooth
+            + ", computed identically for image and library spectra, were compared with every library "
             f"spectrum using the Spectral Angle Mapper (threshold {s['sam_max_rad']} rad; Kruse et al., 1993) "
             f"and Spectral Information Divergence (threshold {s['sid_max']}; Chang, 2000), retaining matches "
             "where both selected the same spectrum. Reflectance spectra were unmixed with fully constrained "

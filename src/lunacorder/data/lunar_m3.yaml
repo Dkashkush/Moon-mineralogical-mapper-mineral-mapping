@@ -16,13 +16,14 @@
 #   Mg-spinel    – strong 2 um band with no 1 um band (Pieters et al. 2011)
 #   Fe-glass     – broad 1.0-1.15 & 1.9-2.0 um bands (Horgan et al. 2014)
 #
-# Windows below are chosen for M3 global mode: 20 nm sampling up to 1549 nm and
-# 40 nm sampling beyond, with 540-2500 nm usable (bands 1-2 and thermally
+# Windows below are chosen for M3 global mode: 40 nm sampling below 701 nm, 20 nm from
+# 730 to 1549 nm and 40 nm beyond, with 540-2500 nm usable (bands 1-2 and thermally
 # affected bands >2.5 um excluded). Pyroxenes share identical windows so their
 # fit x depth scores compete on equal terms; band position is resolved by shape.
 
-name: lunar-m3-v0.1
+name: lunar-m3-v0.2
 wavelength_range_nm: [540, 2500]
+min_reference_depth: 0.02   # a reference must show each diagnostic feature at least 2 % deep
 
 groups:
   mafic: "Fe2+ crystal-field absorptions of lunar silicates, oxides and glass"
@@ -124,7 +125,9 @@ materials:
   - name: Fe-bearing glass
     group: mafic
     color: "#d95f02"
-    references: ["glass", "74220", "74001", "15426"]
+    # 74220 = Apollo 17 orange glass soil, 15426 = Apollo 15 green glass. Not 74001: its black
+    # beads are the crystallised (olivine + ilmenite) equivalent of the orange glass.
+    references: ["glass", "74220", "15426"]
     exclude: ["Obsidian", "Fiberglass", "Glass_(?:Window|Bottle)"]
     features:
       - name: 1 um band

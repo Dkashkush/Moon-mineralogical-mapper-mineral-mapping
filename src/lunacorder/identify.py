@@ -143,8 +143,8 @@ def resolve(expert: ExpertSystem, library: SpectralLibrary, wavelengths: np.ndar
                     window = window[ref_usable[window]]
                 cr = local_continuum_removed(wl, ref[None, :], left, right, window)[0]
                 depth = float(1.0 - np.nanmin(cr))
-                if not np.isfinite(depth) or depth <= 1e-4:
-                    break  # this reference does not actually show the feature
+                if not np.isfinite(depth) or depth < expert.min_reference_depth:
+                    break  # this reference does not clearly show the feature
                 feats.append(_Feature(f.name, left, right, window, cr - 1.0, depth, f.min_fit))
             if len(feats) != len(mat.features):
                 reasons.append(library.names[li])
@@ -152,7 +152,8 @@ def resolve(expert: ExpertSystem, library: SpectralLibrary, wavelengths: np.ndar
             depths = np.array([f.ref_depth for f in feats])
             references.append(_Reference(mi, li, library.names[li], feats, depths / depths.sum()))
         if not any(r.material == mi for r in references):
-            skipped[mat.name] = ("matching spectra lack the diagnostic feature(s) or wavelength coverage: "
+            skipped[mat.name] = ("matching spectra lack the diagnostic feature(s) (depth < "
+                                 f"{expert.min_reference_depth}) or wavelength coverage: "
                                  + ", ".join(reasons[:5]))
     for name, why in skipped.items():
         warnings.warn(f"{name} will not be mapped: {why}", stacklevel=2)

@@ -21,8 +21,13 @@ from .library import SpectralLibrary
 
 @dataclass
 class EnsembleSettings:
-    sam_max_rad: float = 0.10
-    sid_max: float = 0.04
+    # SAM/SID compare band-depth spectra (1 - continuum-removed) with the mineral references.
+    # On the first real test area no featureless null passed these limits (null SAM 1st
+    # percentile 0.45 rad), and every SAM+SID match of a real pixel named the same mineral as
+    # feature fitting. Mature-soil bands are weak, so few pixels pass: agreement is strong
+    # evidence, disagreement is not evidence against a detection.
+    sam_max_rad: float = 0.35
+    sid_max: float = 1.0
     smooth_window: int | None = 7  # Savitzky-Golay window for SAM/SID input; None = off
     lsma: bool = True
     lsma_shade: bool = True
@@ -76,27 +81,45 @@ def run_ensemble(cube: np.ndarray, wavelengths: np.ndarray, good: np.ndarray, li
                  settings: EnsembleSettings | None = None, progress: bool = True) -> EnsembleResult:
     s = settings or EnsembleSettings()
     shape = cube.shape[:-1]
+    # Whole-spectrum methods need every band in every spectrum. Drop bands that most lab
+    # spectra cannot cover (e.g. 2497 nm: ASD spectra stop at 2500 nm, the M3 band extends
+    # past it), otherwise only the few spectra complete in *every* band would be compared.
+    good = np.asarray(good, bool).copy()
+    idx = np.flatnonzero(good)
+    good[idx[np.isfinite(library.spectra[:, idx]).mean(axis=0) < 0.95]] = False
     wl = np.asarray(wavelengths, float)[good]
     pix = cube.reshape(-1, cube.shape[-1])[:, good].astype(np.float64)
     lib = library.spectra[:, good].astype(np.float64)
-    lib_ok = np.all(np.isfinite(lib), axis=1)  # SAM/SID need complete spectra
-    lib_rows = np.flatnonzero(lib_ok)
+    complete = np.all(np.isfinite(lib), axis=1)
+    # Compare with the materials' reference spectra only: the question is "which mineral does
+    # the whole spectrum point to?". With lunar soils in the library, mature-soil pixels always
+    # match a soil (e.g. RELAB "Standard lunar mix"), which confirms nothing about minerals.
+    is_ref = row_materials(library, resolved) >= 0
+    lib_rows = np.flatnonzero(complete & is_ref) if (complete & is_ref).any() else np.flatnonzero(complete)
     n_mat = len(result.material_names)
 
-    # --- SAM + SID on continuum-removed (optionally smoothed) spectra -------------
+    def prep(a):
+        """Identical pre-processing for pixels and references: smoothing, then hull removal."""
+        return classic.hull_removed(wl, classic.smooth(a, s.smooth_window) if s.smooth_window else a,
+                                    progress=progress and len(a) > 100_000)
+
+    # --- SAM + SID on band-depth spectra (1 - continuum-removed) -----------------
+    # On continuum-removed spectra every spectrum is close to 1, so angles are tiny for
+    # everything (featureless noise matched the library *better* than real pixels on the
+    # first real scene). Band-depth vectors keep only the absorptions, so a pixel without a
+    # band points in a random direction and fails the thresholds.
     if progress:
         print("SAM + SID ...", flush=True)
-    work = classic.smooth(pix, s.smooth_window) if s.smooth_window else pix
-    pix_cr = classic.hull_removed(wl, work, progress=progress)
-    lib_cr = classic.hull_removed(wl, lib[lib_rows])
+    pix_cr = prep(pix)
+    lib_cr = prep(lib[lib_rows])
     rm = row_materials(library, resolved)[lib_rows]
-    m = classic.sam_sid(pix_cr, lib_cr, s.sam_max_rad, s.sid_max, row_material=rm)
+    m = classic.sam_sid(1.0 - pix_cr, 1.0 - lib_cr, s.sam_max_rad, s.sid_max, row_material=rm)
     sam_spectrum = np.where(m.sam_index >= 0, lib_rows[np.maximum(m.sam_index, 0)], -1)
 
     # --- LSMA + CEM with one data-chosen endmember per material -------------------
     chosen = choose_endmembers(resolved, result)
-    em_mats = sorted(chosen)
-    em = library.spectra[[chosen[i] for i in em_mats]][:, good].astype(np.float64)
+    em_mats = [i for i in sorted(chosen) if np.all(np.isfinite(lib[chosen[i]]))]
+    em = lib[[chosen[i] for i in em_mats]]
     em_names = [f"{result.material_names[i]} ({library.names[chosen[i]]})" for i in em_mats]
 
     frac = rmse = dominant = None
@@ -125,7 +148,7 @@ def run_ensemble(cube: np.ndarray, wavelengths: np.ndarray, good: np.ndarray, li
             print("CEM ...", flush=True)
         # CEM on continuum-removed band-depth spectra (CR - 1): brightness-independent,
         # so a dark pixel of the target scores like a bright one.
-        em_cr = classic.hull_removed(wl, em) - 1.0
+        em_cr = prep(em) - 1.0
         scores = classic.cem(pix_cr - 1.0, em_cr)
         det = classic.cem_detections(scores, s.cem_min_score, s.cem_min_z)
         for j, mi in enumerate(em_mats):
@@ -182,7 +205,9 @@ def write_crosscheck(result: IdentificationResult, ens: EnsembleResult, path: st
 
             full = pct(ens.consensus == 3)
             best = max(pct(sam), pct(lsm), pct(cm)) if n else float("nan")
-            status = "" if not n else "GOOD" if best >= 70 else "REVIEW" if best >= 50 else "POOR"
+            # Low agreement is common for weak (mature-soil) bands; it means "not independently
+            # confirmed", not "wrong". Check the spectra figure for those detections.
+            status = "" if not n else "CONFIRMED" if best >= 70 else "PARTLY" if best >= 50 else "UNCONFIRMED"
             w.writerow([name, n, int(sam.sum()), int(lsm.sum()), int(cm.sum()),
                         f"{pct(sam):.1f}", f"{pct(lsm):.1f}", f"{pct(cm):.1f}", f"{full:.1f}", status])
     return path

@@ -10,6 +10,7 @@ YAML layout::
 
     name: lunar-m3
     wavelength_range_nm: [540, 2500]
+    min_reference_depth: 0.02              # references must show each feature at least this deep
     groups:
       mafic: "Fe2+ crystal-field absorptions"
     materials:
@@ -80,6 +81,10 @@ class ExpertSystem:
     wavelength_range_nm: tuple[float, float]
     groups: dict[str, str]
     materials: list[MaterialDef]
+    # A reference spectrum is used only if every diagnostic feature is at least this deep in it.
+    # Lab spectra with a barely visible band (e.g. Fe-poor anorthite, 0.2 %) define no usable
+    # band shape, and scaling them up to a pixel's depth mostly fits noise.
+    min_reference_depth: float = 0.02
 
     def materials_in(self, group: str) -> list[int]:
         return [i for i, m in enumerate(self.materials) if m.group == group]
@@ -124,6 +129,7 @@ class ExpertSystem:
             wavelength_range_nm=_pair(cfg.get("wavelength_range_nm", (0, 1e9))),
             groups=dict(cfg["groups"]),
             materials=materials,
+            min_reference_depth=float(cfg.get("min_reference_depth", 0.02)),
         )
 
 

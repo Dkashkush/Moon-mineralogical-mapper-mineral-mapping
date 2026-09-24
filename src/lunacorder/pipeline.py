@@ -79,7 +79,7 @@ def map_scene(folder: str | Path, scene_id: str, library: str | Path | SpectralL
     feature fitting (see :mod:`lunacorder.ensemble`).
 
     ``destripe`` removes along-track detector-column stripes: ``"strip"`` estimates the
-    column gains from the whole scene strip (every 20th line), ``"window"`` from the
+    column gains from ~1,000 lines spread over the whole strip, ``"window"`` from the
     window being mapped, ``None`` disables it.
     """
     t0 = time.time()
@@ -123,7 +123,7 @@ def map_scene(folder: str | Path, scene_id: str, library: str | Path | SpectralL
     params = band_parameters(wl, cube, good)
     prefix = scene_id
 
-    products.write_image_products(result, outdir, prefix, params)
+    products.write_image_products(result, outdir, prefix, params, valid)
     products.write_summary(result, outdir / f"{prefix}_summary.csv", valid)
     ens = None
     if ensemble:
@@ -138,7 +138,7 @@ def map_scene(folder: str | Path, scene_id: str, library: str | Path | SpectralL
         if map_project:
             try:
                 products.write_map_products(result, lon, lat, outdir, prefix, params, resolution_m,
-                                            consensus=None if ens is None else ens.consensus)
+                                            consensus=None if ens is None else ens.consensus, valid=valid)
             except ImportError:
                 print("rasterio not installed: skipping GeoTIFF output")
     if figures:

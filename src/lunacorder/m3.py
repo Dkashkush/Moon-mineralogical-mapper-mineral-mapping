@@ -189,9 +189,11 @@ class M3Scene:
         cube = self.rfl.read(rows, cols)
         # Reflectance cannot be <= 0; such values are fill or artefacts.
         cube[cube <= 0] = np.nan
-        # Old integer PDS versions stored reflectance scaled by 30000.
         if np.issubdtype(self.rfl.dtype, np.integer):
-            cube /= 30000.0
+            # PDS M3 L2 reflectance is float32. An integer file needs a documented scale factor,
+            # which must not be guessed (an earlier notebook's "/30000" was wrong).
+            raise ValueError(f"{self.rfl.path.name} holds integer data; M3 L2 reflectance should be "
+                             "float32. Check that this is the L2 *_rfl product.")
         return cube
 
     def read_lonlat(self, rows: slice = slice(None), cols: slice = slice(None),
